@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files", "params": {
+    "q": "'F-documents' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+    "fields": "nextPageToken, files(id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink)",
+    "pageSize": 1000 } },
+  "response": { "status": 200, "data": {
+    "nextPageToken": "pagina-2",
+    "files": [
+      { "id": "D-report", "name": "report.pdf", "mimeType": "application/pdf", "size": "1024", "md5Checksum": "md5-report", "modifiedTime": "2026-03-01T10:00:00.000Z", "parents": ["F-documents"], "webViewLink": "https://drive.google.com/file/d/D-report/view" },
+      { "id": "D-minutes", "name": "Meeting minutes", "mimeType": "application/vnd.google-apps.document", "modifiedTime": "2026-03-02T10:00:00.000Z", "parents": ["F-documents"], "webViewLink": "https://docs.google.com/document/d/D-minutes/edit" },
+      { "id": "D-shortcut", "name": "shortcut", "mimeType": "application/vnd.google-apps.shortcut", "modifiedTime": "2026-03-02T11:00:00.000Z", "parents": ["F-documents"] }
+    ]
+  } }
+}

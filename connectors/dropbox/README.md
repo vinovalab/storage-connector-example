@@ -1,33 +1,33 @@
-# Connettore Dropbox
+# Dropbox connector
 
-OAuth2 con refresh token, HTTP puro, cursore per il delta.
+OAuth2 with a refresh token, plain HTTP, a cursor for the delta.
 
-**È il modello da imitare.** La maggior parte dei provider — Box, pCloud,
-Nextcloud, i NAS — funziona come Dropbox: gli identificatori sono percorsi, non
-id opachi, e questo cambia una cosa importante.
+**This is the one to imitate.** Most providers — Box, pCloud, Nextcloud, NAS
+devices — work like Dropbox: identifiers are paths, not opaque ids, and that
+changes one important thing.
 
-## Il punto su cui si sbaglia
+## The mistake everyone makes
 
-`fileBelongsToFolder` è sovrascritto. Il default del contratto confronta
-`file.parentId` con l'id della cartella monitorata: su un provider a percorso
-significa che `/documenti/2026/fattura.pdf` **non** appartiene a `/documenti`, e
-la sincronizzazione incrementale non porta mai niente dalle sotto-cartelle. Il
-difetto non si vede in una prova con file in una cartella sola.
+`fileBelongsToFolder` is overridden. The contract's default compares
+`file.parentId` with the monitored folder's id; on a path-based provider that
+means `/documents/2026/invoice.pdf` does **not** belong to `/documents`, and
+incremental synchronisation never brings anything back from sub-folders. The
+defect does not show in a test with files in a single folder.
 
-## Altre due cose che Dropbox fa a modo suo
+## Two more things Dropbox does its own way
 
-- La radice è la **stringa vuota**, non `/`. Con `path: "/"` la prima chiamata
-  risponde 400 e l'errore non spiega perché.
-- Il parametro del download viaggia nell'header `Dropbox-API-Arg`, non nel
-  corpo. Vale solo per gli endpoint di contenuto.
+- The root is the **empty string**, not `/`. With `path: "/"` the first call
+  returns a 400 and the error does not say why.
+- The download argument travels in the `Dropbox-API-Arg` header, not in the
+  body. This applies to the content endpoints only.
 
-## Variabili
+## Variables
 
-| chiave | dove si trova |
+| key | where to find it |
 |---|---|
-| `DROPBOX_APP_KEY` | console Dropbox, App key |
-| `DROPBOX_APP_SECRET` | console Dropbox, App secret |
-| `DROPBOX_REDIRECT_URI` | l'URL di callback registrato nell'app |
+| `DROPBOX_APP_KEY` | Dropbox console, App key |
+| `DROPBOX_APP_SECRET` | Dropbox console, App secret |
+| `DROPBOX_REDIRECT_URI` | the callback URL registered in the app |
 
-Nell'autorizzazione serve `token_access_type=offline`: senza, Dropbox non
-consegna il refresh token e la connessione muore dopo quattro ore.
+The authorisation needs `token_access_type=offline`: without it Dropbox issues
+no refresh token and the connection dies after four hours.

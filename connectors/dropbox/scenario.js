@@ -1,65 +1,65 @@
 "use strict";
 
-// Cosa contengono le fixture, detto all'host della conformita.
+// What the fixtures contain, told to the conformance suite.
 //
-// Lo scenario non e un dettaglio del test: e la descrizione dell'account di
-// prova, ed e quello che chi scrive un connettore nuovo deve ricreare sul
-// proprio provider prima di registrare le risposte. Una cartella con **piu
-// file di quanti ne stiano in una pagina**, una sotto-cartella, un file da
-// scaricare, una modifica e una cancellazione dopo un cursore.
+// The scenario is not a detail of the tests: it describes the test account, and
+// it is what someone writing a new connector has to reproduce on their own
+// provider before recording anything. A folder holding **more files than fit in
+// one page**, a sub-folder, a file to download, one modification and one
+// deletion after a cursor.
 
 module.exports = {
   folders: {
     parentId: null,
-    expectedIds: ["/documenti"],
+    expectedIds: ["/documents"],
   },
 
-  // Cinque file su due pagine: `has_more: true` sulla prima. Un connettore che
-  // legge solo la prima risposta ne troverebbe due invece di quattro.
+  // Files spread over two pages: `has_more: true` on the first one. A connector
+  // that reads only the first response finds two of them instead of four.
   files: {
-    folderId: "/Documenti",
+    folderId: "/Documents",
     expectedIds: [
-      "/documenti/relazione.pdf",
-      "/documenti/verbale.docx",
-      "/documenti/note.txt",
-      "/documenti/immagine.png",
+      "/documents/report.pdf",
+      "/documents/minutes.docx",
+      "/documents/notes.txt",
+      "/documents/image.png",
     ],
   },
 
   recursive: {
-    folderId: "/Documenti",
+    folderId: "/Documents",
     expectedIds: [
-      "/documenti/relazione.pdf",
-      "/documenti/verbale.docx",
-      "/documenti/note.txt",
-      "/documenti/immagine.png",
-      "/documenti/2026/fattura.pdf",
+      "/documents/report.pdf",
+      "/documents/minutes.docx",
+      "/documents/notes.txt",
+      "/documents/image.png",
+      "/documents/2026/invoice.pdf",
     ],
   },
 
   download: {
-    fileId: "/documenti/relazione.pdf",
+    fileId: "/documents/report.pdf",
     mimeType: "application/pdf",
-    expectedBytes: 28,
+    expectedBytes: 22,
     expectedMimeType: "application/pdf",
   },
 
   changes: {
     cursor: "cursor-1",
-    expectedUpdatedIds: ["/documenti/verbale.docx"],
-    expectedDeletedIds: ["/documenti/note.txt"],
+    expectedUpdatedIds: ["/documents/minutes.docx"],
+    expectedDeletedIds: ["/documents/notes.txt"],
   },
 
-  // Un file dentro la sotto-cartella deve risultare appartenente alla cartella
-  // monitorata: e il controllo che il default del contratto **non** supera, e
-  // per cui questo connettore sovrascrive `fileBelongsToFolder`.
+  // A file inside the sub-folder must be recognised as belonging to the
+  // monitored folder. It is the check the contract's default does **not** pass,
+  // and the reason this connector overrides `fileBelongsToFolder`.
   folderMatching: {
-    file: { id: "/documenti/2026/fattura.pdf", pathLower: "/documenti/2026/fattura.pdf", parentId: "/documenti/2026" },
-    folder: { provider_folder_id: "/documenti", recursive: true },
+    file: { id: "/documents/2026/invoice.pdf", pathLower: "/documents/2026/invoice.pdf", parentId: "/documents/2026" },
+    folder: { provider_folder_id: "/documents", recursive: true },
     expected: true,
   },
 
   refresh: {
-    expectedAccessToken: "nuovo-token",
+    expectedAccessToken: "new-token",
   },
 };

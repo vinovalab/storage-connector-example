@@ -5,7 +5,7 @@ const { defineManifest } = require("@vinovalab/storage-connector-contract");
 module.exports = defineManifest({
   key: "GOOGLE_DRIVE",
   label: "Google Drive",
-  description: "Sincronizza i file da Google Drive, esportando i documenti nativi in PDF.",
+  description: "Synchronises files from Google Drive, exporting native documents as PDF.",
   icon: "mdi:google-drive",
   contractVersion: "1.0.0",
   transport: "http",
@@ -20,20 +20,19 @@ module.exports = defineManifest({
   },
 
   config: [
-    { key: "GOOGLE_OAUTH_CLIENT_ID", required: true, description: "Client ID OAuth del progetto Google Cloud." },
-    { key: "GOOGLE_OAUTH_CLIENT_SECRET", required: true, secret: true, description: "Client secret OAuth." },
-    { key: "GOOGLE_OAUTH_REDIRECT_URI", required: true, description: "URI di redirect registrato nel progetto Google." },
+    { key: "GOOGLE_OAUTH_CLIENT_ID", required: true, description: "OAuth client ID of the Google Cloud project." },
+    { key: "GOOGLE_OAUTH_CLIENT_SECRET", required: true, secret: true, description: "OAuth client secret." },
+    { key: "GOOGLE_OAUTH_REDIRECT_URI", required: true, description: "Redirect URI registered in the Google project." },
   ],
 
   capabilities: {
     deltaSync: true,
     folderPicker: true,
-    // Gli identificatori di Drive sono opachi e le cartelle hanno un id: il
-    // confronto predefinito fra genitori va bene, non serve sovrascriverlo.
+    // Drive identifiers are opaque and folders have an id of their own, so the
+    // contract's default parent comparison is right here: no override needed.
     pathBasedMatching: false,
-    // Documenti, Fogli e Presentazioni non hanno un file da scaricare: si
-    // esportano. E' la particolarita che rende Drive un cattivo stampo per gli
-    // altri connettori.
+    // Docs, Sheets and Slides have no file to download — they are exported.
+    // That peculiarity is what makes Drive a poor mould for other connectors.
     exportsNativeFormats: true,
   },
 

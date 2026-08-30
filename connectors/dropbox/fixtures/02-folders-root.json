@@ -5,8 +5,8 @@
   },
   "response": { "status": 200, "data": {
     "entries": [
-      { ".tag": "folder", "name": "Documenti", "path_lower": "/documenti", "path_display": "/Documenti", "id": "id:cartella-documenti" }
+      { ".tag": "folder", "name": "Documents", "path_lower": "/documents", "path_display": "/Documents", "id": "id:cartella-documents" }
     ],
-    "cursor": "cursor-radice", "has_more": false
+    "cursor": "cursor-root", "has_more": false
   } }
 }

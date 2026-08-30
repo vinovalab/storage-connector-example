@@ -1,14 +1,13 @@
 "use strict";
 
-// Il connettore Dropbox.
+// The Dropbox connector.
 //
-// E' il modello da imitare per chi ne scrive uno nuovo: nessun SDK, solo
-// chiamate HTTP dentro `this.http`, identificatori che sono percorsi, cursore
-// per il delta. Box, pCloud, Nextcloud e la maggior parte dei NAS funzionano
-// cosi; Google Drive, con i suoi id opachi e i formati da esportare, e il caso
-// particolare.
+// This is the one to imitate. No SDK, every call inside `this.http`, identifiers
+// that are paths, a cursor for the delta. Box, pCloud, Nextcloud and most NAS
+// devices work the same way; Google Drive, with its opaque ids and its native
+// documents, is the exception.
 
-const path = require("path");
+const nodePath = require("path");
 const { BaseProvider } = require("@vinovalab/storage-connector-contract");
 
 const API = "https://api.dropboxapi.com/2";
@@ -16,11 +15,11 @@ const CONTENT_API = "https://content.dropboxapi.com/2";
 const AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize";
 const TOKEN_URL = "https://api.dropboxapi.com/oauth2/token";
 
-// Dropbox non dice il mime type: lo si deduce dall'estensione. L'elenco resta
-// corto di proposito — e la stessa domanda a cui risponde `isIndexable` del
-// contratto, e allungarlo qui senza allungarlo li produrrebbe file scaricati e
-// mai indicizzati.
-const MIME_PER_ESTENSIONE = {
+// Dropbox does not tell you the mime type: it has to be inferred from the
+// extension. The list is deliberately short — it answers the same question as
+// the contract's `isIndexable`, and extending one without the other produces
+// files that are downloaded and never indexed.
+const MIME_BY_EXTENSION = {
   ".csv": "text/csv",
   ".doc": "application/msword",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -36,27 +35,29 @@ const MIME_PER_ESTENSIONE = {
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
-// La radice per Dropbox e la stringa vuota, non "/": e l'unico posto dove le
-// due cose si distinguono, e sbagliarlo produce un 400 sulla prima chiamata.
-function percorso(valore) {
-  if (!valore || valore === "/") return "";
-  return String(valore).startsWith("/") ? String(valore) : `/${valore}`;
+// The root of a Dropbox account is the empty string, not "/". It is the only
+// place where the two differ, and getting it wrong returns a 400 on the very
+// first call with an error that does not explain why.
+function toPath(value) {
+  if (!value || value === "/") return "";
+  return String(value).startsWith("/") ? String(value) : `/${value}`;
 }
 
-function percorsoGenitore(valore) {
-  const normalizzato = percorso(valore);
-  if (!normalizzato) return "";
-  const taglio = normalizzato.lastIndexOf("/");
-  return taglio <= 0 ? "" : normalizzato.slice(0, taglio).toLowerCase();
+function parentPath(value) {
+  const normalised = toPath(value);
+  if (!normalised) return "";
+  const cut = normalised.lastIndexOf("/");
+  return cut <= 0 ? "" : normalised.slice(0, cut).toLowerCase();
 }
 
-const mimeDi = (nome) => MIME_PER_ESTENSIONE[path.extname(String(nome || "")).toLowerCase()] || "application/octet-stream";
+const mimeFromName = (name) => MIME_BY_EXTENSION[nodePath.extname(String(name || "")).toLowerCase()]
+  || "application/octet-stream";
 
 class DropboxProvider extends BaseProvider {
   static get key() { return "DROPBOX"; }
 
-  constructor(opzioni = {}) {
-    super(opzioni);
+  constructor(options = {}) {
+    super(options);
     this._clientId = this.env.DROPBOX_APP_KEY || "";
     this._clientSecret = this.env.DROPBOX_APP_SECRET || "";
     this._redirectUri = this.env.DROPBOX_REDIRECT_URI || "";
@@ -65,12 +66,12 @@ class DropboxProvider extends BaseProvider {
   // ── OAuth ───────────────────────────────────────────────────────────────
 
   getAuthUrl(state) {
-    if (!this._clientId) throw new Error("DROPBOX_APP_KEY mancante.");
+    if (!this._clientId) throw new Error("DROPBOX_APP_KEY is missing.");
     const qs = new URLSearchParams({
       client_id: this._clientId,
       response_type: "code",
-      // Senza `offline` Dropbox non consegna il refresh token e la connessione
-      // muore dopo quattro ore, quando nessuno sta guardando.
+      // Without `offline` Dropbox never sends a refresh token, and the
+      // connection dies four hours later, when nobody is watching.
       token_access_type: "offline",
       state,
     });
@@ -79,217 +80,218 @@ class DropboxProvider extends BaseProvider {
   }
 
   async exchangeCode(code) {
-    const corpo = new URLSearchParams({
+    const body = new URLSearchParams({
       code,
       grant_type: "authorization_code",
       client_id: this._clientId,
       client_secret: this._clientSecret,
     });
-    if (this._redirectUri) corpo.set("redirect_uri", this._redirectUri);
-    const risposta = await this.http({
+    if (this._redirectUri) body.set("redirect_uri", this._redirectUri);
+    const response = await this.http({
       method: "POST",
       url: TOKEN_URL,
-      data: corpo.toString(),
+      data: body.toString(),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    return this._credenzialiDa(risposta.data);
+    return this._credentialsFrom(response.data);
   }
 
   async refreshCredentials() {
     const refreshToken = this.credentials.refresh_token;
     if (!refreshToken) return this.credentials;
-    const corpo = new URLSearchParams({
+    const body = new URLSearchParams({
       refresh_token: refreshToken,
       grant_type: "refresh_token",
       client_id: this._clientId,
       client_secret: this._clientSecret,
     });
-    const risposta = await this.http({
+    const response = await this.http({
       method: "POST",
       url: TOKEN_URL,
-      data: corpo.toString(),
+      data: body.toString(),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    // `_setCredentials` non e un dettaglio di stile: e cosi che l'host viene a
-    // sapere che deve persistere il nuovo token. Assegnare `this.credentials`
-    // e basta lascia la connessione viva finche il processo vive, e morta al
-    // riavvio successivo.
+    // `_setCredentials` is not a matter of style: it is how the host learns that
+    // it has to persist the new token. Assigning `this.credentials` and nothing
+    // else keeps the connection alive for as long as the process lives, and
+    // dead after the next restart.
     return this._setCredentials({
-      ...this._credenzialiDa(risposta.data),
+      ...this._credentialsFrom(response.data),
       refresh_token: refreshToken,
     });
   }
 
-  _credenzialiDa(dati = {}) {
+  _credentialsFrom(data = {}) {
     return {
-      access_token: dati.access_token || null,
-      refresh_token: dati.refresh_token || this.credentials.refresh_token || null,
-      expires_at: dati.expires_in ? Date.now() + Number(dati.expires_in) * 1000 : null,
-      account_id: dati.account_id || this.credentials.account_id || null,
+      access_token: data.access_token || null,
+      refresh_token: data.refresh_token || this.credentials.refresh_token || null,
+      expires_at: data.expires_in ? Date.now() + Number(data.expires_in) * 1000 : null,
+      account_id: data.account_id || this.credentials.account_id || null,
     };
   }
 
-  // ── chiamate ────────────────────────────────────────────────────────────
+  // ── calls ───────────────────────────────────────────────────────────────
 
-  async _token() {
-    const scadenza = Number(this.credentials.expires_at || 0);
-    // Un minuto di margine: un token che scade mentre la richiesta viaggia
-    // produce un 401 su un file a caso, in mezzo a una sincronizzazione.
-    if (!this.credentials.access_token || (scadenza && Date.now() > scadenza - 60_000)) {
+  async _accessToken() {
+    const expiresAt = Number(this.credentials.expires_at || 0);
+    // One minute of margin: a token that expires while the request is in flight
+    // produces a 401 on a random file, halfway through a synchronisation.
+    if (!this.credentials.access_token || (expiresAt && Date.now() > expiresAt - 60_000)) {
       await this.refreshCredentials();
     }
-    if (!this.credentials.access_token) throw new Error("Access token Dropbox mancante.");
+    if (!this.credentials.access_token) throw new Error("Dropbox access token is missing.");
     return this.credentials.access_token;
   }
 
-  async _chiama(endpoint, corpo = {}) {
-    const token = await this._token();
-    const risposta = await this.http({
+  async _call(endpoint, body = {}) {
+    const token = await this._accessToken();
+    const response = await this.http({
       method: "POST",
       url: `${API}${endpoint}`,
-      data: corpo,
+      data: body,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     });
-    return risposta.data;
+    return response.data;
   }
 
-  // ── contratto ───────────────────────────────────────────────────────────
+  // ── contract ────────────────────────────────────────────────────────────
 
   async testConnection() {
     try {
-      await this._chiama("/users/get_current_account", null);
-      return { ok: true, message: "Dropbox raggiungibile." };
+      await this._call("/users/get_current_account", null);
+      return { ok: true, message: "Dropbox reachable." };
     } catch (err) {
-      return { ok: false, message: err?.response?.data?.error_summary || err?.message || "Connessione fallita." };
+      return { ok: false, message: err?.response?.data?.error_summary || err?.message || "Connection failed." };
     }
   }
 
   async listFolders(parentId = null) {
-    const { entries } = await this._elencaCartella({ path: percorso(parentId), recursive: false });
+    const { entries } = await this._listFolder({ path: toPath(parentId), recursive: false });
     return entries
-      .filter((voce) => voce[".tag"] === "folder")
-      .map((voce) => ({
-        id: voce.path_lower || percorso(voce.path_display),
-        name: voce.name,
-        parentId: percorsoGenitore(voce.path_lower || voce.path_display),
+      .filter((entry) => entry[".tag"] === "folder")
+      .map((entry) => ({
+        id: entry.path_lower || toPath(entry.path_display),
+        name: entry.name,
+        parentId: parentPath(entry.path_lower || entry.path_display),
         modifiedAt: null,
       }));
   }
 
   async listFiles(folderId) {
-    const { entries } = await this._elencaCartella({ path: percorso(folderId), recursive: false });
-    return entries.filter(this._scaricabile).map((voce) => this._normalizza(voce));
+    const { entries } = await this._listFolder({ path: toPath(folderId), recursive: false });
+    return entries.filter(this._isDownloadable).map((entry) => this._normalise(entry));
   }
 
   async listFilesRecursive(folderId) {
-    const { entries } = await this._elencaCartella({ path: percorso(folderId), recursive: true });
-    return entries.filter(this._scaricabile).map((voce) => this._normalizza(voce));
+    const { entries } = await this._listFolder({ path: toPath(folderId), recursive: true });
+    return entries.filter(this._isDownloadable).map((entry) => this._normalise(entry));
   }
 
-  async downloadFile(fileId, mimeType, _opzioni = {}) {
-    const token = await this._token();
-    const risposta = await this.http({
+  async downloadFile(fileId, mimeType, _options = {}) {
+    const token = await this._accessToken();
+    const response = await this.http({
       method: "POST",
       url: `${CONTENT_API}/files/download`,
       data: "",
       responseType: "arraybuffer",
       headers: {
         Authorization: `Bearer ${token}`,
-        // Il parametro viaggia in un header, non nel corpo: e la stranezza di
-        // Dropbox, e vale solo per gli endpoint di contenuto.
+        // The argument travels in a header rather than in the body. That is
+        // Dropbox's oddity, and it applies to the content endpoints only.
         "Dropbox-API-Arg": JSON.stringify({ path: fileId }),
         "Content-Type": "text/plain",
       },
     });
-    return { buffer: Buffer.from(risposta.data), mimeType: mimeType || mimeDi(fileId) };
+    return { buffer: Buffer.from(response.data), mimeType: mimeType || mimeFromName(fileId) };
   }
 
   async getChanges(cursor = null) {
     if (!cursor) {
-      // Alla prima chiamata si prende **solo** il punto di partenza: elencare
-      // qui tutto il contenuto farebbe sincronizzare all'host due volte lo
-      // stesso archivio.
-      const dati = await this._chiama("/files/list_folder/get_latest_cursor", {
+      // The first call takes the starting point and nothing else. Listing the
+      // whole account here would make the host synchronise the same archive
+      // twice, on every connection.
+      const data = await this._call("/files/list_folder/get_latest_cursor", {
         path: "", recursive: true, include_deleted: false, include_mounted_folders: true,
       });
-      return { changes: [], nextPageToken: dati.cursor, isInitial: true };
+      return { changes: [], nextPageToken: data.cursor, isInitial: true };
     }
 
     const changes = [];
-    let corrente = cursor;
-    let altro = true;
-    while (altro) {
-      const dati = await this._chiama("/files/list_folder/continue", { cursor: corrente });
-      for (const voce of dati.entries || []) {
-        if (voce[".tag"] === "deleted") {
-          changes.push({ type: "deleted", fileId: voce.path_lower || percorso(voce.path_display) });
-        } else if (this._scaricabile(voce)) {
-          changes.push({ type: "updated", fileId: voce.path_lower, file: this._normalizza(voce) });
+    let current = cursor;
+    let hasMore = true;
+    while (hasMore) {
+      const data = await this._call("/files/list_folder/continue", { cursor: current });
+      for (const entry of data.entries || []) {
+        if (entry[".tag"] === "deleted") {
+          changes.push({ type: "deleted", fileId: entry.path_lower || toPath(entry.path_display) });
+        } else if (this._isDownloadable(entry)) {
+          changes.push({ type: "updated", fileId: entry.path_lower, file: this._normalise(entry) });
         }
       }
-      corrente = dati.cursor || corrente;
-      altro = Boolean(dati.has_more);
+      current = data.cursor || current;
+      hasMore = Boolean(data.has_more);
     }
-    return { changes, nextPageToken: corrente, isInitial: false };
+    return { changes, nextPageToken: current, isInitial: false };
   }
 
   /**
-   * Su un provider a percorso il confronto fra genitori non basta.
+   * On a path-based provider, comparing parents is not enough.
    *
-   * Il default del contratto guarda `file.parentId === folder.provider_folder_id`:
-   * su Dropbox vuol dire che un file dentro `/Documenti/2026/` non appartiene a
-   * `/Documenti`, e la sincronizzazione incrementale non porta mai niente dalle
-   * sotto-cartelle. E' l'errore piu comune di chi copia un connettore a id.
+   * The contract's default checks `file.parentId === folder.provider_folder_id`.
+   * On Dropbox that means a file in `/documents/2026/` does not belong to
+   * `/documents`, and incremental synchronisation never brings anything back
+   * from sub-folders. It is the classic mistake of anyone adapting an id-based
+   * connector.
    */
   fileBelongsToFolder(file, folder) {
-    const cartella = percorso(folder?.provider_folder_id).toLowerCase();
-    const percorsoFile = percorso(file?.pathLower || file?.id).toLowerCase();
-    if (!cartella) return true;
-    if (!percorsoFile) return false;
-    if (file.parentId === cartella) return true;
-    return Boolean(folder?.recursive) && percorsoFile.startsWith(`${cartella}/`);
+    const folderPath = toPath(folder?.provider_folder_id).toLowerCase();
+    const filePath = toPath(file?.pathLower || file?.id).toLowerCase();
+    if (!folderPath) return true;
+    if (!filePath) return false;
+    if (file.parentId === folderPath) return true;
+    return Boolean(folder?.recursive) && filePath.startsWith(`${folderPath}/`);
   }
 
-  // ── interno ─────────────────────────────────────────────────────────────
+  // ── internals ───────────────────────────────────────────────────────────
 
-  _scaricabile(voce) {
-    return voce[".tag"] === "file" && voce.is_downloadable !== false;
+  _isDownloadable(entry) {
+    return entry[".tag"] === "file" && entry.is_downloadable !== false;
   }
 
-  async _elencaCartella(argomenti) {
+  async _listFolder(args) {
     const entries = [];
-    let dati = await this._chiama("/files/list_folder", {
+    let data = await this._call("/files/list_folder", {
       include_deleted: false,
       include_mounted_folders: true,
       include_non_downloadable_files: false,
-      ...argomenti,
+      ...args,
     });
-    entries.push(...(dati.entries || []));
-    // La paginazione non e facoltativa: una cartella con duemila file arriva in
-    // pagine da cinquecento, e chi si ferma alla prima ne perde tre quarti
-    // senza che niente lo segnali.
-    while (dati.has_more) {
-      dati = await this._chiama("/files/list_folder/continue", { cursor: dati.cursor });
-      entries.push(...(dati.entries || []));
+    entries.push(...(data.entries || []));
+    // Pagination is not optional: a folder with two thousand files arrives in
+    // pages of five hundred, and stopping at the first one loses three quarters
+    // of it with nothing to signal the loss.
+    while (data.has_more) {
+      data = await this._call("/files/list_folder/continue", { cursor: data.cursor });
+      entries.push(...(data.entries || []));
     }
-    return { entries, cursor: dati.cursor || null };
+    return { entries, cursor: data.cursor || null };
   }
 
-  _normalizza(voce) {
-    const percorsoFile = percorso(voce.path_display || voce.path_lower || voce.id);
-    const mimeType = mimeDi(voce.name);
+  _normalise(entry) {
+    const filePath = toPath(entry.path_display || entry.path_lower || entry.id);
+    const mimeType = mimeFromName(entry.name);
     return {
-      id: voce.path_lower || percorsoFile,
-      name: voce.name,
+      id: entry.path_lower || filePath,
+      name: entry.name,
       mimeType,
-      size: voce.size ? Number(voce.size) : null,
-      checksum: voce.content_hash || null,
-      modifiedAt: voce.server_modified || voce.client_modified || null,
-      parentId: percorsoGenitore(voce.path_lower || percorsoFile),
+      size: entry.size ? Number(entry.size) : null,
+      checksum: entry.content_hash || null,
+      modifiedAt: entry.server_modified || entry.client_modified || null,
+      parentId: parentPath(entry.path_lower || filePath),
       webViewLink: null,
       isIndexable: this.isIndexable(mimeType),
-      pathLower: voce.path_lower || percorsoFile.toLowerCase(),
-      pathDisplay: percorsoFile,
+      pathLower: entry.path_lower || filePath.toLowerCase(),
+      pathDisplay: filePath,
     };
   }
 }

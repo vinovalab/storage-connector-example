@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder/continue",
+    "data": { "cursor": "cursor-page-2" }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "file", "name": "notes.txt", "path_lower": "/documents/notes.txt", "path_display": "/Documents/notes.txt", "size": 128, "content_hash": "hash-notes", "server_modified": "2026-03-03T10:00:00Z", "is_downloadable": true },
+      { ".tag": "file", "name": "image.png", "path_lower": "/documents/image.png", "path_display": "/Documents/image.png", "size": 4096, "content_hash": "hash-image", "server_modified": "2026-03-04T10:00:00Z", "is_downloadable": true }
+    ],
+    "cursor": "cursor-end", "has_more": false
+  } }
+}

@@ -1,47 +1,46 @@
 "use strict";
 
-// Cosa contengono le fixture di Drive.
+// What the Drive fixtures contain.
 //
-// L'account di prova ha una cartella `Documenti` con dentro: un PDF, un
-// documento Google nativo, una scorciatoia (che non deve comparire) e — sulla
-// **seconda pagina** — un file di testo. Dentro `Documenti` c'e la
-// sotto-cartella `2026` con una fattura.
+// The test account has a `Documents` folder holding a PDF, a native Google
+// document, a shortcut (which must not appear) and — on the **second page** — a
+// text file. Inside `Documents` there is a `2026` sub-folder with an invoice.
 
 module.exports = {
   folders: {
     parentId: null,
-    expectedIds: ["F-documenti"],
+    expectedIds: ["F-documents"],
   },
 
-  // La scorciatoia non c'e: Drive la restituisce fra i file, ma non si scarica.
-  // Un connettore che la elenca produce un download fallito a ogni giro.
+  // The shortcut is absent: Drive returns it among the files, but it cannot be
+  // downloaded. A connector that lists it produces a failed download every run.
   files: {
-    folderId: "F-documenti",
-    expectedIds: ["D-relazione", "D-verbale", "D-note"],
+    folderId: "F-documents",
+    expectedIds: ["D-report", "D-minutes", "D-notes"],
   },
 
   recursive: {
-    folderId: "F-documenti",
-    expectedIds: ["D-relazione", "D-verbale", "D-note", "D-fattura"],
+    folderId: "F-documents",
+    expectedIds: ["D-report", "D-minutes", "D-notes", "D-invoice"],
   },
 
   download: {
-    fileId: "D-relazione",
+    fileId: "D-report",
     mimeType: "application/pdf",
-    expectedBytes: 28,
+    expectedBytes: 22,
     expectedMimeType: "application/pdf",
   },
 
   changes: {
     cursor: "12345",
-    expectedUpdatedIds: ["D-note"],
-    // Due modi diversi di sparire, e per l'host devono essere la stessa cosa:
-    // `removed: true` quando il file esce dalla vista dell'utente, e
-    // `trashed: true` quando finisce nel cestino.
-    expectedDeletedIds: ["D-relazione", "D-sparito"],
+    expectedUpdatedIds: ["D-notes"],
+    // Two different ways of disappearing, and to the host they must be the same
+    // thing: `removed: true` when the file leaves the user's view, and
+    // `trashed: true` when it goes into the wastebasket.
+    expectedDeletedIds: ["D-report", "D-gone"],
   },
 
   refresh: {
-    expectedAccessToken: "nuovo-token",
+    expectedAccessToken: "new-token",
   },
 };

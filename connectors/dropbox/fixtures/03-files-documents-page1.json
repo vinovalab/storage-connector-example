@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.dropboxapi.com/2/files/list_folder",
+    "data": {
+      "include_deleted": false,
+      "include_mounted_folders": true,
+      "include_non_downloadable_files": false,
+      "path": "/Documents",
+      "recursive": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "data": {
+      "entries": [
+        {
+          ".tag": "file",
+          "name": "report.pdf",
+          "path_lower": "/documents/report.pdf",
+          "path_display": "/Documents/report.pdf",
+          "size": 1024,
+          "content_hash": "hash-report",
+          "server_modified": "2026-03-01T10:00:00Z",
+          "is_downloadable": true
+        },
+        {
+          ".tag": "file",
+          "name": "minutes.docx",
+          "path_lower": "/documents/minutes.docx",
+          "path_display": "/Documents/minutes.docx",
+          "size": 2048,
+          "content_hash": "hash-minutes",
+          "server_modified": "2026-03-02T10:00:00Z",
+          "is_downloadable": true
+        },
+        {
+          ".tag": "file",
+          "name": "brainstorming.paper",
+          "path_lower": "/documents/brainstorming.paper",
+          "path_display": "/Documents/brainstorming.paper",
+          "size": 900,
+          "content_hash": "hash-paper",
+          "server_modified": "2026-03-06T10:00:00Z",
+          "is_downloadable": false
+        },
+        {
+          ".tag": "folder",
+          "name": "2026",
+          "path_lower": "/documents/2026",
+          "path_display": "/Documents/2026"
+        }
+      ],
+      "cursor": "cursor-page-2",
+      "has_more": true
+    }
+  }
+}

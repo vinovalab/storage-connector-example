@@ -1,7 +1,7 @@
 {
   "name": "storage-connector-example",
   "version": "1.0.0",
-  "description": "Due connettori di storage completi — Google Drive e Dropbox — come modello per scriverne altri.",
+  "description": "Two complete storage connectors — Google Drive and Dropbox — as a model for writing others.",
   "private": true,
   "type": "commonjs",
   "scripts": {
@@ -9,10 +9,10 @@
     "record": "node scripts/record.js"
   },
   "dependencies": {
-    "@vinovalab/storage-connector-contract": "^1.0.0"
+    "@vinovalab/storage-connector-contract": "1.0.0"
   },
   "devDependencies": {
-    "axios": "^1.6.7"
+    "axios": "1.7.9"
   },
   "license": "UNLICENSED"
 }

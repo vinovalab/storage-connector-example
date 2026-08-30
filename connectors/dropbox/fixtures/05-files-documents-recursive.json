@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder",
+    "data": { "include_deleted": false, "include_mounted_folders": true, "include_non_downloadable_files": false, "path": "/Documents", "recursive": true }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "file", "name": "report.pdf", "path_lower": "/documents/report.pdf", "path_display": "/Documents/report.pdf", "size": 1024, "content_hash": "hash-report", "server_modified": "2026-03-01T10:00:00Z", "is_downloadable": true },
+      { ".tag": "file", "name": "minutes.docx", "path_lower": "/documents/minutes.docx", "path_display": "/Documents/minutes.docx", "size": 2048, "content_hash": "hash-minutes", "server_modified": "2026-03-02T10:00:00Z", "is_downloadable": true },
+      { ".tag": "file", "name": "notes.txt", "path_lower": "/documents/notes.txt", "path_display": "/Documents/notes.txt", "size": 128, "content_hash": "hash-notes", "server_modified": "2026-03-03T10:00:00Z", "is_downloadable": true },
+      { ".tag": "file", "name": "image.png", "path_lower": "/documents/image.png", "path_display": "/Documents/image.png", "size": 4096, "content_hash": "hash-image", "server_modified": "2026-03-04T10:00:00Z", "is_downloadable": true },
+      { ".tag": "folder", "name": "2026", "path_lower": "/documents/2026", "path_display": "/Documents/2026" },
+      { ".tag": "file", "name": "invoice.pdf", "path_lower": "/documents/2026/invoice.pdf", "path_display": "/Documents/2026/invoice.pdf", "size": 512, "content_hash": "hash-invoice", "server_modified": "2026-03-05T10:00:00Z", "is_downloadable": true }
+    ],
+    "cursor": "cursor-recursive", "has_more": false
+  } }
+}

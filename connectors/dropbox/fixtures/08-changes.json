@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder/continue",
+    "data": { "cursor": "cursor-1" }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "file", "name": "minutes.docx", "path_lower": "/documents/minutes.docx", "path_display": "/Documents/minutes.docx", "size": 2100, "content_hash": "hash-minutes-2", "server_modified": "2026-03-10T09:00:00Z", "is_downloadable": true },
+      { ".tag": "deleted", "name": "notes.txt", "path_lower": "/documents/notes.txt", "path_display": "/Documents/notes.txt" }
+    ],
+    "cursor": "cursor-2", "has_more": false
+  } }
+}

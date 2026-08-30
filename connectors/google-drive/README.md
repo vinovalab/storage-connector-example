@@ -1,41 +1,42 @@
-# Connettore Google Drive
+# Google Drive connector
 
-OAuth2, id opachi, documenti nativi da esportare. **È il caso particolare**: chi
-scrive un connettore nuovo parta da `dropbox/`.
+OAuth2, opaque ids, native documents that must be exported. **This is the
+exception**: anyone writing a new connector should start from `dropbox/`.
 
-## Senza `googleapis`
+## Without `googleapis`
 
-Le chiamate che servono sono sei — `about`, `files.list`, download, export,
-`changes/startPageToken`, `changes` — più il rinnovo del token. Scritte a mano
-stanno in duecento righe, non trascinano cento megabyte nell'immagine, e passano
-da `this.http`: è quest'ultima cosa che permette di verificare il connettore su
-risposte registrate, senza un account Google.
+The calls it needs are six — `about`, `files.list`, download, export,
+`changes/startPageToken`, `changes` — plus the token refresh. Written by hand
+they fit in two hundred lines, they do not drag a hundred megabytes of SDK into
+the image, and — this is the part that matters — they go through `this.http`,
+which is what makes the connector verifiable against recorded responses without
+a Google account.
 
-> Verificato sulle fixture, non contro un account reale: il primo giro su Drive
-> vero va fatto in DEV prima di sostituire la versione in servizio.
+> Verified against fixtures, not against a real account: the first run on a real
+> Drive should happen in DEV before this replaces the version in service.
 
-## Le tre trappole
+## The three traps
 
-- **I documenti nativi non si scaricano.** Un Documento Google va esportato, e
-  ciò che si ottiene è un PDF: il mime del contenuto **non** è il mime del file.
-  È la ragione per cui il contratto vuole `{ buffer, mimeType }`.
-- **Il cestino è una cancellazione.** Google non dice «rimosso» per un file
-  cestinato: dice che è cambiato, con `trashed: true`. Trattarlo come modifica
-  tiene indicizzato un documento che l'utente ha buttato via.
-- **Il cursore finale è `newStartPageToken`**, non l'ultimo `nextPageToken`.
-  Salvare quello sbagliato fa rileggere gli stessi cambiamenti per sempre.
+- **Native documents are not downloaded.** A Google Doc has to be exported, and
+  what you get is a PDF: the mime type of the content is **not** the mime type
+  of the file. This is why the contract asks for `{ buffer, mimeType }`.
+- **The wastebasket is a deletion.** Google does not say "removed" for a trashed
+  file: it says the file changed, with `trashed: true`. Treating that as a
+  modification keeps a document the user threw away in the index.
+- **The final cursor is `newStartPageToken`**, not the last `nextPageToken`.
+  Storing the wrong one replays the same changes for ever.
 
-Le scorciatoie, i moduli, le mappe e i siti si saltano: stanno in Drive, non
-hanno contenuto, e il download fallisce a ogni giro.
+Shortcuts, forms, maps and sites are skipped: they live in Drive, they have no
+content, and downloading them fails on every run.
 
-## Variabili
+## Variables
 
-| chiave | dove si trova |
+| key | where to find it |
 |---|---|
-| `GOOGLE_OAUTH_CLIENT_ID` | Google Cloud Console, credenziali OAuth |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | idem |
-| `GOOGLE_OAUTH_REDIRECT_URI` | URI di redirect autorizzato nel progetto |
+| `GOOGLE_OAUTH_CLIENT_ID` | Google Cloud Console, OAuth credentials |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | same place |
+| `GOOGLE_OAUTH_REDIRECT_URI` | an authorised redirect URI in the project |
 
-Nell'autorizzazione servono `access_type=offline` **e** `prompt=consent`: senza
-il secondo, alla seconda connessione Google non rimanda il refresh token e la
-sincronizzazione muore dopo un'ora.
+The authorisation needs `access_type=offline` **and** `prompt=consent`: without
+the second one, a second connection gets no refresh token from Google and
+synchronisation dies after an hour.

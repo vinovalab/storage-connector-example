@@ -1,19 +1,19 @@
 "use strict";
 
-// Il connettore Google Drive.
+// The Google Drive connector.
 //
-// **Non usa `googleapis`.** La versione in servizio si appoggia all'SDK, che
-// pesa oltre cento megabyte nell'immagine e, soprattutto, fa le richieste per
-// conto proprio: un connettore che non passa da `this.http` non si puo
-// verificare su risposte registrate, e la sua conformita si potrebbe eseguire
-// solo con un account Google vero in mano a chi revisiona.
+// **It does not use `googleapis`.** The version currently in service relies on
+// the SDK, which weighs over a hundred megabytes in the image and, more
+// importantly, makes its own requests: a connector that does not go through
+// `this.http` cannot be verified against recorded responses, and its conformance
+// could only be run by a reviewer holding a real Google account.
 //
-// Le chiamate che servono sono sei, tutte GET tranne il rinnovo del token.
-// Scritte a mano stanno in duecento righe e si possono provare offline.
+// The calls it needs are six, all GET except the token refresh. Written by hand
+// they fit in two hundred lines and can be exercised offline.
 //
-// Drive e il caso **particolare**, non il modello: id opachi, cartelle che sono
-// file con un mime speciale, e documenti nativi che non si scaricano ma si
-// esportano. Chi scrive un connettore nuovo parta da Dropbox.
+// Drive is the **exception**, not the model: opaque ids, folders that are files
+// with a special mime type, and native documents that are exported rather than
+// downloaded. Anyone writing a new connector should start from Dropbox.
 
 const { BaseProvider } = require("@vinovalab/storage-connector-contract");
 
@@ -21,36 +21,36 @@ const API = "https://www.googleapis.com/drive/v3";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
-const MIME_CARTELLA = "application/vnd.google-apps.folder";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-// I formati nativi e come si esportano. Il download di questi file non
-// restituisce il documento: restituisce un errore, ed e per questo che il
-// contratto vuole `{ buffer, mimeType }` invece del solo Buffer — il mime del
-// contenuto scaricato **non e** quello del file.
-const ESPORTAZIONI = {
+// The native formats and how they are exported. Downloading one of these files
+// does not return the document, it returns an error — which is why the contract
+// asks for `{ buffer, mimeType }` instead of a bare Buffer: the mime type of
+// what you downloaded is **not** the mime type of the file.
+const EXPORTS = {
   "application/vnd.google-apps.document": "application/pdf",
   "application/vnd.google-apps.spreadsheet": "application/pdf",
   "application/vnd.google-apps.presentation": "application/pdf",
   "application/vnd.google-apps.drawing": "image/png",
 };
 
-// Cose che stanno in Drive e non sono file: scorciatoie, moduli, mappe, siti.
-// Elencarle produrrebbe download falliti a ogni sincronizzazione.
-const DA_SALTARE = new Set([
+// Things that live in Drive and are not files: shortcuts, forms, maps, sites.
+// Listing them produces a failed download on every synchronisation.
+const SKIP = new Set([
   "application/vnd.google-apps.shortcut",
-  MIME_CARTELLA,
+  FOLDER_MIME,
   "application/vnd.google-apps.form",
   "application/vnd.google-apps.site",
   "application/vnd.google-apps.map",
 ]);
 
-const CAMPI_FILE = "id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink";
+const FILE_FIELDS = "id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink";
 
 class GoogleDriveProvider extends BaseProvider {
   static get key() { return "GOOGLE_DRIVE"; }
 
-  constructor(opzioni = {}) {
-    super(opzioni);
+  constructor(options = {}) {
+    super(options);
     this._clientId = this.env.GOOGLE_OAUTH_CLIENT_ID || "";
     this._clientSecret = this.env.GOOGLE_OAUTH_CLIENT_SECRET || "";
     this._redirectUri = this.env.GOOGLE_OAUTH_REDIRECT_URI || "";
@@ -59,15 +59,15 @@ class GoogleDriveProvider extends BaseProvider {
   // ── OAuth ───────────────────────────────────────────────────────────────
 
   getAuthUrl(state) {
-    if (!this._clientId) throw new Error("GOOGLE_OAUTH_CLIENT_ID mancante.");
+    if (!this._clientId) throw new Error("GOOGLE_OAUTH_CLIENT_ID is missing.");
     const qs = new URLSearchParams({
       client_id: this._clientId,
       redirect_uri: this._redirectUri,
       response_type: "code",
-      // `offline` per avere il refresh token, `consent` per riaverlo anche
-      // quando l'utente ha gia autorizzato: senza, alla seconda connessione
-      // Google restituisce solo un access token e la sincronizzazione muore
-      // dopo un'ora.
+      // `offline` to receive a refresh token, `consent` to receive it again on
+      // an account that has already authorised us. Without the second one, the
+      // second connection gets an access token only and synchronisation dies an
+      // hour later.
       access_type: "offline",
       prompt: "consent",
       scope: [
@@ -80,94 +80,93 @@ class GoogleDriveProvider extends BaseProvider {
   }
 
   async exchangeCode(code) {
-    const corpo = new URLSearchParams({
+    const body = new URLSearchParams({
       code,
       client_id: this._clientId,
       client_secret: this._clientSecret,
       redirect_uri: this._redirectUri,
       grant_type: "authorization_code",
     });
-    const risposta = await this.http({
+    const response = await this.http({
       method: "POST",
       url: TOKEN_URL,
-      data: corpo.toString(),
+      data: body.toString(),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    return this._credenzialiDa(risposta.data);
+    return this._credentialsFrom(response.data);
   }
 
   async refreshCredentials() {
     const refreshToken = this.credentials.refresh_token;
     if (!refreshToken) return this.credentials;
-    const corpo = new URLSearchParams({
+    const body = new URLSearchParams({
       refresh_token: refreshToken,
       client_id: this._clientId,
       client_secret: this._clientSecret,
       grant_type: "refresh_token",
     });
-    const risposta = await this.http({
+    const response = await this.http({
       method: "POST",
       url: TOKEN_URL,
-      data: corpo.toString(),
+      data: body.toString(),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    // Google non rimanda il refresh token nei rinnovi: perderlo qui vorrebbe
-    // dire non poter piu rinnovare, e la connessione morirebbe all'ora
-    // successiva.
-    return this._setCredentials({ ...this._credenzialiDa(risposta.data), refresh_token: refreshToken });
+    // Google never returns the refresh token on a renewal: losing it here means
+    // never being able to renew again, and the connection dies within the hour.
+    return this._setCredentials({ ...this._credentialsFrom(response.data), refresh_token: refreshToken });
   }
 
-  _credenzialiDa(dati = {}) {
+  _credentialsFrom(data = {}) {
     return {
-      access_token: dati.access_token || null,
-      refresh_token: dati.refresh_token || this.credentials.refresh_token || null,
-      expiry_date: dati.expires_in ? Date.now() + Number(dati.expires_in) * 1000 : null,
-      token_type: dati.token_type || "Bearer",
+      access_token: data.access_token || null,
+      refresh_token: data.refresh_token || this.credentials.refresh_token || null,
+      expiry_date: data.expires_in ? Date.now() + Number(data.expires_in) * 1000 : null,
+      token_type: data.token_type || "Bearer",
     };
   }
 
-  // ── chiamate ────────────────────────────────────────────────────────────
+  // ── calls ───────────────────────────────────────────────────────────────
 
-  async _token() {
-    const scadenza = Number(this.credentials.expiry_date || 0);
-    if (!this.credentials.access_token || (scadenza && Date.now() > scadenza - 60_000)) {
+  async _accessToken() {
+    const expiresAt = Number(this.credentials.expiry_date || 0);
+    if (!this.credentials.access_token || (expiresAt && Date.now() > expiresAt - 60_000)) {
       await this.refreshCredentials();
     }
-    if (!this.credentials.access_token) throw new Error("Access token Google mancante.");
+    if (!this.credentials.access_token) throw new Error("Google access token is missing.");
     return this.credentials.access_token;
   }
 
-  async _get(percorso, params = {}, extra = {}) {
-    const token = await this._token();
-    const risposta = await this.http({
+  async _get(path, params = {}, extra = {}) {
+    const token = await this._accessToken();
+    const response = await this.http({
       method: "GET",
-      url: `${API}${percorso}`,
+      url: `${API}${path}`,
       params,
       headers: { Authorization: `Bearer ${token}` },
       ...extra,
     });
-    return risposta.data;
+    return response.data;
   }
 
-  // ── contratto ───────────────────────────────────────────────────────────
+  // ── contract ────────────────────────────────────────────────────────────
 
   async testConnection() {
     try {
       await this._get("/about", { fields: "user" });
-      return { ok: true, message: "Google Drive raggiungibile." };
+      return { ok: true, message: "Google Drive reachable." };
     } catch (err) {
-      return { ok: false, message: err?.response?.data?.error?.message || err?.message || "Connessione fallita." };
+      return { ok: false, message: err?.response?.data?.error?.message || err?.message || "Connection failed." };
     }
   }
 
   async listFolders(parentId = null) {
-    const dati = await this._get("/files", {
-      q: `'${parentId || "root"}' in parents and mimeType = '${MIME_CARTELLA}' and trashed = false`,
+    const data = await this._get("/files", {
+      q: `'${parentId || "root"}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: "files(id, name, parents, modifiedTime)",
       pageSize: 200,
       orderBy: "name",
     });
-    return (dati.files || []).map((f) => ({
+    return (data.files || []).map((f) => ({
       id: f.id,
       name: f.name,
       parentId: (f.parents || [])[0] || null,
@@ -176,85 +175,85 @@ class GoogleDriveProvider extends BaseProvider {
   }
 
   async listFiles(folderId) {
-    const fuori = [];
+    const out = [];
     let pageToken = null;
     do {
-      const dati = await this._get("/files", {
-        q: `'${folderId}' in parents and trashed = false and mimeType != '${MIME_CARTELLA}'`,
-        fields: `nextPageToken, files(${CAMPI_FILE})`,
+      const data = await this._get("/files", {
+        q: `'${folderId}' in parents and trashed = false and mimeType != '${FOLDER_MIME}'`,
+        fields: `nextPageToken, files(${FILE_FIELDS})`,
         pageSize: 1000,
         ...(pageToken ? { pageToken } : {}),
       });
-      for (const f of dati.files || []) {
-        if (!DA_SALTARE.has(f.mimeType)) fuori.push(this._normalizza(f, folderId));
+      for (const f of data.files || []) {
+        if (!SKIP.has(f.mimeType)) out.push(this._normalise(f, folderId));
       }
-      pageToken = dati.nextPageToken || null;
+      pageToken = data.nextPageToken || null;
     } while (pageToken);
-    return fuori;
+    return out;
   }
 
   async listFilesRecursive(folderId) {
-    const file = await this.listFiles(folderId);
-    for (const sotto of await this.listFolders(folderId)) {
-      file.push(...await this.listFilesRecursive(sotto.id));
+    const files = await this.listFiles(folderId);
+    for (const sub of await this.listFolders(folderId)) {
+      files.push(...await this.listFilesRecursive(sub.id));
     }
-    return file;
+    return files;
   }
 
-  async downloadFile(fileId, mimeType, _opzioni = {}) {
-    const esportazione = ESPORTAZIONI[mimeType];
-    if (esportazione) {
-      const dati = await this._get(`/files/${encodeURIComponent(fileId)}/export`, { mimeType: esportazione }, { responseType: "arraybuffer" });
-      // Il mime restituito e quello **dell'esportazione**: il chiamante scrive
-      // un PDF, non un documento Google.
-      return { buffer: Buffer.from(dati), mimeType: esportazione };
+  async downloadFile(fileId, mimeType, _options = {}) {
+    const exportAs = EXPORTS[mimeType];
+    if (exportAs) {
+      const data = await this._get(`/files/${encodeURIComponent(fileId)}/export`, { mimeType: exportAs }, { responseType: "arraybuffer" });
+      // The mime type returned is the **export's**: the caller writes a PDF, not
+      // a Google document.
+      return { buffer: Buffer.from(data), mimeType: exportAs };
     }
-    const dati = await this._get(`/files/${encodeURIComponent(fileId)}`, { alt: "media" }, { responseType: "arraybuffer" });
-    return { buffer: Buffer.from(dati), mimeType };
+    const data = await this._get(`/files/${encodeURIComponent(fileId)}`, { alt: "media" }, { responseType: "arraybuffer" });
+    return { buffer: Buffer.from(data), mimeType };
   }
 
   async getChanges(cursor = null) {
     if (!cursor) {
-      const dati = await this._get("/changes/startPageToken", {});
-      return { changes: [], nextPageToken: dati.startPageToken, isInitial: true };
+      const data = await this._get("/changes/startPageToken", {});
+      return { changes: [], nextPageToken: data.startPageToken, isInitial: true };
     }
 
     const changes = [];
-    let corrente = cursor;
-    let altro = true;
-    while (altro) {
-      const dati = await this._get("/changes", {
-        pageToken: corrente,
-        fields: `nextPageToken, newStartPageToken, changes(fileId, removed, file(${CAMPI_FILE}, trashed))`,
+    let current = cursor;
+    let hasMore = true;
+    while (hasMore) {
+      const data = await this._get("/changes", {
+        pageToken: current,
+        fields: `nextPageToken, newStartPageToken, changes(fileId, removed, file(${FILE_FIELDS}, trashed))`,
         spaces: "drive",
         includeRemoved: true,
         pageSize: 1000,
       });
 
-      for (const cambiamento of dati.changes || []) {
-        // Il cestino e una cancellazione: un file cestinato non si scarica piu,
-        // e lasciarlo indicizzato terrebbe in vita un documento che l'utente ha
-        // buttato via.
-        if (cambiamento.removed || cambiamento.file?.trashed) {
-          changes.push({ type: "deleted", fileId: cambiamento.fileId });
-        } else if (cambiamento.file && !DA_SALTARE.has(cambiamento.file.mimeType)) {
-          changes.push({ type: "updated", fileId: cambiamento.fileId, file: this._normalizza(cambiamento.file) });
+      for (const change of data.changes || []) {
+        // The wastebasket is a deletion: a trashed file can no longer be
+        // downloaded, and leaving it indexed keeps alive a document the user
+        // threw away.
+        if (change.removed || change.file?.trashed) {
+          changes.push({ type: "deleted", fileId: change.fileId });
+        } else if (change.file && !SKIP.has(change.file.mimeType)) {
+          changes.push({ type: "updated", fileId: change.fileId, file: this._normalise(change.file) });
         }
       }
 
-      if (dati.newStartPageToken) {
-        corrente = dati.newStartPageToken;
-        altro = false;
-      } else if (dati.nextPageToken) {
-        corrente = dati.nextPageToken;
+      if (data.newStartPageToken) {
+        current = data.newStartPageToken;
+        hasMore = false;
+      } else if (data.nextPageToken) {
+        current = data.nextPageToken;
       } else {
-        altro = false;
+        hasMore = false;
       }
     }
-    return { changes, nextPageToken: corrente, isInitial: false };
+    return { changes, nextPageToken: current, isInitial: false };
   }
 
-  _normalizza(f, folderId = null) {
+  _normalise(f, folderId = null) {
     return {
       id: f.id,
       name: f.name,
@@ -265,7 +264,7 @@ class GoogleDriveProvider extends BaseProvider {
       parentId: folderId || (f.parents || [])[0] || null,
       webViewLink: f.webViewLink || null,
       isIndexable: this.isIndexable(f.mimeType),
-      exportMimeType: ESPORTAZIONI[f.mimeType] || null,
+      exportMimeType: EXPORTS[f.mimeType] || null,
     };
   }
 }

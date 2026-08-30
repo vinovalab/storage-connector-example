@@ -1,11 +1,11 @@
 {
   "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files", "params": {
-    "q": "'F-documenti' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+    "q": "'F-documents' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
     "fields": "nextPageToken, files(id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink)",
     "pageSize": 1000, "pageToken": "pagina-2" } },
   "response": { "status": 200, "data": {
     "files": [
-      { "id": "D-note", "name": "note.txt", "mimeType": "text/plain", "size": "128", "md5Checksum": "md5-note", "modifiedTime": "2026-03-03T10:00:00.000Z", "parents": ["F-documenti"] }
+      { "id": "D-notes", "name": "notes.txt", "mimeType": "text/plain", "size": "128", "md5Checksum": "md5-notes", "modifiedTime": "2026-03-03T10:00:00.000Z", "parents": ["F-documents"] }
     ]
   } }
 }

@@ -1,4 +1,4 @@
 {
   "request": { "method": "POST", "url": "https://api.dropboxapi.com/2/users/get_current_account", "data": null },
-  "response": { "status": 200, "data": { "account_id": "dbid:AAA", "name": { "display_name": "Utente di prova" }, "email": "prova@example.com" } }
+  "response": { "status": 200, "data": { "account_id": "dbid:AAA", "name": { "display_name": "Test user" }, "email": "test@example.com" } }
 }

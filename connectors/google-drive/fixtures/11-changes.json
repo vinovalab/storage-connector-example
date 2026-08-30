@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/changes", "params": {
+    "pageToken": "12345",
+    "fields": "nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink, trashed))",
+    "spaces": "drive", "includeRemoved": true, "pageSize": 1000 } },
+  "response": { "status": 200, "data": {
+    "newStartPageToken": "12399",
+    "changes": [
+      { "fileId": "D-notes", "removed": false, "file": { "id": "D-notes", "name": "notes.txt", "mimeType": "text/plain", "size": "256", "md5Checksum": "md5-notes-2", "modifiedTime": "2026-03-11T10:00:00.000Z", "parents": ["F-documents"], "trashed": false } },
+      { "fileId": "D-report", "removed": false, "file": { "id": "D-report", "name": "report.pdf", "mimeType": "application/pdf", "modifiedTime": "2026-03-12T10:00:00.000Z", "parents": ["F-documents"], "trashed": true } },
+      { "fileId": "D-gone", "removed": true }
+    ]
+  } }
+}

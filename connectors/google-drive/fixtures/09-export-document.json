@@ -1,0 +1,4 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files/D-minutes/export", "params": { "mimeType": "application/pdf" } },
+  "response": { "status": 200, "encoding": "base64", "data": "JVBERi0xLjQKZXhwb3J0ZWQgZnJvbSBHb29nbGUgRG9jcwo=" }
+}

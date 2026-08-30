@@ -12,9 +12,9 @@ const DropboxProvider = require("./provider");
 const manifest = require("./manifest");
 const scenario = require("./scenario");
 
-// L'account di prova non serve: le risposte sono registrate. E' cio che rende
-// questa verifica ripetibile in CI, sul portatile di chi revisiona, e fra sei
-// mesi quando l'account non esistera piu.
+// No test account is needed: the responses are recorded. That is what makes this
+// verification repeatable in CI, on a reviewer's laptop, and six months from now
+// when the account no longer exists.
 
 const ENV = {
   DROPBOX_APP_KEY: "app-key",
@@ -22,77 +22,73 @@ const ENV = {
   DROPBOX_REDIRECT_URI: "https://example.test/oauth/dropbox/callback",
 };
 
-const CREDENZIALI = {
-  access_token: "token-valido",
+const CREDENTIALS = {
+  access_token: "valid-token",
   refresh_token: "r-1",
   expires_at: Date.now() + 3600_000,
 };
 
-const creaProvider = (credenziali = CREDENZIALI) => new DropboxProvider({
-  credentials: { ...credenziali },
+const createProvider = (credentials = CREDENTIALS) => new DropboxProvider({
+  credentials: { ...credentials },
   env: ENV,
   http: createReplayTransport({ dir: path.join(__dirname, "fixtures") }),
   logger: { info() {}, warning() {}, error() {} },
 });
 
-registerConformanceTests(test, { createProvider: () => creaProvider(), manifest, scenario });
+registerConformanceTests(test, { createProvider: () => createProvider(), manifest, scenario });
 
-// ── oltre la conformita: cio che e specifico di Dropbox ──────────────────
+// ── beyond conformance: what is specific to Dropbox ──────────────────────
 
-test("[invariante] la radice e la stringa vuota, non «/»", async () => {
-  // E' l'unico posto in cui le due cose si distinguono: `path: "/"` produce un
-  // 400 sulla prima chiamata, e l'errore di Dropbox non spiega perche.
-  const cartelle = await creaProvider().listFolders("/");
-  assert.deepEqual(cartelle.map((c) => c.id), ["/documenti"]);
+test("[invariant] the root is the empty string, not «/»", async () => {
+  // The only place where the two differ: `path: "/"` returns a 400 on the first
+  // call, and Dropbox's error does not explain why.
+  const folders = await createProvider().listFolders("/");
+  assert.deepEqual(folders.map((f) => f.id), ["/documents"]);
 });
 
-test("[invariante] l'identificatore e il percorso in minuscolo", async () => {
-  // L'host lo salva e lo restituisce al connettore per scaricare: se cambiasse
-  // fra una sincronizzazione e l'altra — maiuscole comprese — ogni file
-  // risulterebbe nuovo e l'archivio si duplicherebbe.
-  const file = await creaProvider().listFiles("/Documenti");
-  assert.ok(file.every((f) => f.id === f.id.toLowerCase()));
-  assert.equal(file[0].pathDisplay, "/Documenti/relazione.pdf", "il nome per gli umani conserva le maiuscole");
+test("[invariant] the identifier is the lowercase path", async () => {
+  // The host stores it and hands it back to download the file. If it changed
+  // between two synchronisations — capitalisation included — every file would
+  // look new and the archive would be duplicated.
+  const files = await createProvider().listFiles("/Documents");
+  assert.ok(files.every((f) => f.id === f.id.toLowerCase()));
+  assert.equal(files[0].pathDisplay, "/Documents/report.pdf", "the human-readable name keeps its capitals");
 });
 
-test("[invariante] un file non scaricabile non entra nell'elenco", async () => {
-  // Dropbox marca cosi i file dei Paper e gli spazi condivisi non montati:
-  // elencarli produrrebbe download falliti a ogni giro, per sempre.
-  const provider = creaProvider();
-  const originale = provider._chiama.bind(provider);
-  provider._chiama = async (endpoint, corpo) => {
-    const dati = await originale(endpoint, corpo);
-    if (endpoint !== "/files/list_folder") return dati;
-    return { ...dati, entries: [...dati.entries, { ".tag": "file", name: "paper.paper", path_lower: "/documenti/paper.paper", is_downloadable: false }] };
-  };
-  const file = await provider.listFiles("/Documenti");
-  assert.equal(file.some((f) => f.id === "/documenti/paper.paper"), false);
+test("[invariant] a file that cannot be downloaded stays out of the list", async () => {
+  // Dropbox marks Paper documents and unmounted shared spaces this way. Listing
+  // them produces a failed download on every run, for ever. The fixture carries
+  // one — `brainstorming.paper` — so the exclusion is proved through the public
+  // surface rather than by reaching into the connector.
+  const files = await createProvider().listFiles("/Documents");
+  assert.equal(files.some((f) => f.id === "/documents/brainstorming.paper"), false);
+  assert.equal(files.length, 4, "the other four are still there: the filter is narrow, not greedy");
 });
 
-test("[invariante] il mime si deduce dall'estensione, e cio che non si indicizza si vede", async () => {
-  const file = await creaProvider().listFiles("/Documenti");
-  const perId = Object.fromEntries(file.map((f) => [f.id, f]));
-  assert.equal(perId["/documenti/relazione.pdf"].mimeType, "application/pdf");
-  assert.equal(perId["/documenti/relazione.pdf"].isIndexable, true);
-  assert.equal(perId["/documenti/immagine.png"].mimeType, "application/octet-stream",
-    "Dropbox non dichiara il mime: senza estensione riconosciuta non si inventa");
-  assert.equal(perId["/documenti/immagine.png"].isIndexable, false,
-    "un'immagine non ha testo da estrarre: indicizzarla sarebbe lavoro sprecato a ogni giro");
+test("[invariant] the mime type is inferred from the extension, and what is not indexable shows", async () => {
+  const files = await createProvider().listFiles("/Documents");
+  const byId = Object.fromEntries(files.map((f) => [f.id, f]));
+  assert.equal(byId["/documents/report.pdf"].mimeType, "application/pdf");
+  assert.equal(byId["/documents/report.pdf"].isIndexable, true);
+  assert.equal(byId["/documents/image.png"].mimeType, "application/octet-stream",
+    "Dropbox does not declare a mime type: with no recognised extension, none is invented");
+  assert.equal(byId["/documents/image.png"].isIndexable, false,
+    "an image has no text to extract: indexing it would be wasted work on every run");
 });
 
-test("[invariante] senza offline non arriva il refresh token", () => {
-  // Dropbox consegna il refresh token **solo** se l'autorizzazione lo chiede.
-  // Senza, la connessione funziona quattro ore e poi muore di notte.
-  const url = new URL(creaProvider().getAuthUrl("stato-123"));
+test("[invariant] without `offline` no refresh token ever arrives", () => {
+  // Dropbox issues a refresh token **only** if the authorisation asks for one.
+  // Without it the connection works for four hours and then dies overnight.
+  const url = new URL(createProvider().getAuthUrl("state-123"));
   assert.equal(url.searchParams.get("token_access_type"), "offline");
-  assert.equal(url.searchParams.get("state"), "stato-123", "lo state torna indietro tale e quale, o la callback non sa a chi appartiene");
+  assert.equal(url.searchParams.get("state"), "state-123", "the state comes back untouched, or the callback cannot tell whose it is");
   assert.equal(url.searchParams.get("client_id"), "app-key");
 });
 
-test("[invariante] il token scaduto si rinnova prima della chiamata, non dopo il 401", async () => {
-  const provider = creaProvider({ access_token: "vecchio", refresh_token: "r-1", expires_at: Date.now() + 30_000 });
-  await provider.listFiles("/Documenti");
-  assert.equal(provider.credentials.access_token, "nuovo-token",
-    "trenta secondi alla scadenza sono meno del margine: si rinnova prima, o il 401 arriva a meta sincronizzazione");
-  assert.ok(provider.takeRefreshedCredentials(), "e l'host deve poterlo salvare");
+test("[invariant] an expiring token is renewed before the call, not after the 401", async () => {
+  const provider = createProvider({ access_token: "old", refresh_token: "r-1", expires_at: Date.now() + 30_000 });
+  await provider.listFiles("/Documents");
+  assert.equal(provider.credentials.access_token, "new-token",
+    "thirty seconds to expiry is inside the margin: renew first, or the 401 lands halfway through a synchronisation");
+  assert.ok(provider.takeRefreshedCredentials(), "and the host must be able to persist it");
 });
