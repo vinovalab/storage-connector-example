@@ -1,0 +1,4 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/changes/startPageToken", "params": {} },
+  "response": { "status": 200, "data": { "startPageToken": "12345" } }
+}

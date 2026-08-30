@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder/continue",
+    "data": { "cursor": "cursor-1" }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "file", "name": "verbale.docx", "path_lower": "/documenti/verbale.docx", "path_display": "/Documenti/verbale.docx", "size": 2100, "content_hash": "hash-verbale-2", "server_modified": "2026-03-10T09:00:00Z", "is_downloadable": true },
+      { ".tag": "deleted", "name": "note.txt", "path_lower": "/documenti/note.txt", "path_display": "/Documenti/note.txt" }
+    ],
+    "cursor": "cursor-2", "has_more": false
+  } }
+}

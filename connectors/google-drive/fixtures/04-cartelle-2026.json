@@ -1,0 +1,6 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files", "params": {
+    "q": "'F-2026' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+    "fields": "files(id, name, parents, modifiedTime)", "pageSize": 200, "orderBy": "name" } },
+  "response": { "status": 200, "data": { "files": [] } }
+}

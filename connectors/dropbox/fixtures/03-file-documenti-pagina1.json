@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder",
+    "data": { "include_deleted": false, "include_mounted_folders": true, "include_non_downloadable_files": false, "path": "/Documenti", "recursive": false }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "file", "name": "relazione.pdf", "path_lower": "/documenti/relazione.pdf", "path_display": "/Documenti/relazione.pdf", "size": 1024, "content_hash": "hash-relazione", "server_modified": "2026-03-01T10:00:00Z", "is_downloadable": true },
+      { ".tag": "file", "name": "verbale.docx", "path_lower": "/documenti/verbale.docx", "path_display": "/Documenti/verbale.docx", "size": 2048, "content_hash": "hash-verbale", "server_modified": "2026-03-02T10:00:00Z", "is_downloadable": true },
+      { ".tag": "folder", "name": "2026", "path_lower": "/documenti/2026", "path_display": "/Documenti/2026" }
+    ],
+    "cursor": "cursor-pagina-2", "has_more": true
+  } }
+}

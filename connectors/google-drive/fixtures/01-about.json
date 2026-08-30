@@ -1,0 +1,4 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/about", "params": { "fields": "user" } },
+  "response": { "status": 200, "data": { "user": { "displayName": "Utente di prova", "emailAddress": "prova@example.com" } } }
+}

@@ -1,0 +1,9 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files", "params": {
+    "q": "'F-2026' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+    "fields": "nextPageToken, files(id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink)",
+    "pageSize": 1000 } },
+  "response": { "status": 200, "data": { "files": [
+    { "id": "D-fattura", "name": "fattura.pdf", "mimeType": "application/pdf", "size": "512", "md5Checksum": "md5-fattura", "modifiedTime": "2026-03-05T10:00:00.000Z", "parents": ["F-2026"] }
+  ] } }
+}

@@ -1,0 +1,7 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder/get_latest_cursor",
+    "data": { "include_deleted": false, "include_mounted_folders": true, "path": "", "recursive": true }
+  },
+  "response": { "status": 200, "data": { "cursor": "cursor-1" } }
+}

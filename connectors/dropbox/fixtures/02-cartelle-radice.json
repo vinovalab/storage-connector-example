@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST", "url": "https://api.dropboxapi.com/2/files/list_folder",
+    "data": { "include_deleted": false, "include_mounted_folders": true, "include_non_downloadable_files": false, "path": "", "recursive": false }
+  },
+  "response": { "status": 200, "data": {
+    "entries": [
+      { ".tag": "folder", "name": "Documenti", "path_lower": "/documenti", "path_display": "/Documenti", "id": "id:cartella-documenti" }
+    ],
+    "cursor": "cursor-radice", "has_more": false
+  } }
+}

@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files", "params": {
+    "q": "'F-documenti' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+    "fields": "nextPageToken, files(id, name, mimeType, size, md5Checksum, modifiedTime, parents, webViewLink)",
+    "pageSize": 1000 } },
+  "response": { "status": 200, "data": {
+    "nextPageToken": "pagina-2",
+    "files": [
+      { "id": "D-relazione", "name": "relazione.pdf", "mimeType": "application/pdf", "size": "1024", "md5Checksum": "md5-relazione", "modifiedTime": "2026-03-01T10:00:00.000Z", "parents": ["F-documenti"], "webViewLink": "https://drive.google.com/file/d/D-relazione/view" },
+      { "id": "D-verbale", "name": "Verbale riunione", "mimeType": "application/vnd.google-apps.document", "modifiedTime": "2026-03-02T10:00:00.000Z", "parents": ["F-documenti"], "webViewLink": "https://docs.google.com/document/d/D-verbale/edit" },
+      { "id": "D-scorciatoia", "name": "collegamento", "mimeType": "application/vnd.google-apps.shortcut", "modifiedTime": "2026-03-02T11:00:00.000Z", "parents": ["F-documenti"] }
+    ]
+  } }
+}

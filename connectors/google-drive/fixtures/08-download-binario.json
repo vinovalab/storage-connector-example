@@ -1,0 +1,4 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files/D-relazione", "params": { "alt": "media" } },
+  "response": { "status": 200, "encoding": "base64", "data": "JVBERi0xLjQKY29udGVudXRvIGRpIHByb3ZhCg==" }
+}
