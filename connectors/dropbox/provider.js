@@ -8,7 +8,7 @@
 // documents, is the exception.
 
 const nodePath = require("path");
-const { BaseProvider } = require("@vinovalab/storage-connector-contract");
+const { BaseProvider, fileNotFound } = require("@vinovalab/storage-connector-contract");
 
 const API = "https://api.dropboxapi.com/2";
 const CONTENT_API = "https://content.dropboxapi.com/2";
@@ -52,6 +52,17 @@ function parentPath(value) {
 
 const mimeFromName = (name) => MIME_BY_EXTENSION[nodePath.extname(String(name || "")).toLowerCase()]
   || "application/octet-stream";
+
+// Dropbox does not answer 404 for a missing path: it answers **409** with a
+// `path/not_found` summary. The body can arrive as a buffer when the request
+// asked for one, which is exactly the case of a download.
+function isPathNotFound(err) {
+  const status = err?.status || err?.response?.status;
+  if (status !== 409) return false;
+  const data = err?.response?.data;
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : JSON.stringify(data || "");
+  return text.includes("path/not_found") || text.includes("not_found");
+}
 
 class DropboxProvider extends BaseProvider {
   static get key() { return "DROPBOX"; }
@@ -189,19 +200,30 @@ class DropboxProvider extends BaseProvider {
 
   async downloadFile(fileId, mimeType, _options = {}) {
     const token = await this._accessToken();
-    const response = await this.http({
-      method: "POST",
-      url: `${CONTENT_API}/files/download`,
-      data: "",
-      responseType: "arraybuffer",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        // The argument travels in a header rather than in the body. That is
-        // Dropbox's oddity, and it applies to the content endpoints only.
-        "Dropbox-API-Arg": JSON.stringify({ path: fileId }),
-        "Content-Type": "text/plain",
-      },
-    });
+    let response;
+    try {
+      response = await this.http({
+        method: "POST",
+        url: `${CONTENT_API}/files/download`,
+        data: "",
+        responseType: "arraybuffer",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // The argument travels in a header rather than in the body. That is
+          // Dropbox's oddity, and it applies to the content endpoints only.
+          "Dropbox-API-Arg": JSON.stringify({ path: fileId }),
+          "Content-Type": "text/plain",
+        },
+      });
+    } catch (err) {
+      // Identifiers here are paths, so a rename is enough to make the stored id
+      // stop resolving — and the download happens long after the sync that
+      // stored it. Dropbox says so with 409 and `path/not_found`; the host only
+      // understands `fileNotFound`, and with it can schedule a re-discovery
+      // instead of marking the document permanently broken.
+      if (isPathNotFound(err)) throw fileNotFound(`Dropbox no longer has ${fileId}`, { cause: err });
+      throw err;
+    }
     return { buffer: Buffer.from(response.data), mimeType: mimeType || mimeFromName(fileId) };
   }
 

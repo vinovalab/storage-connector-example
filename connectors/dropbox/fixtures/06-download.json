@@ -1,6 +1,9 @@
 {
   "request": {
-    "method": "POST", "url": "https://content.dropboxapi.com/2/files/download", "data": ""
+    "method": "POST",
+    "url": "https://content.dropboxapi.com/2/files/download",
+    "data": "",
+    "headers": { "Dropbox-API-Arg": "{\"path\":\"/documents/report.pdf\"}" }
   },
   "response": { "status": 200, "encoding": "base64", "data": "JVBERi0xLjQKdGVzdCBjb250ZW50Cg==" }
 }

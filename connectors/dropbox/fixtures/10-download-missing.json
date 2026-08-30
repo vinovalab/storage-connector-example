@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://content.dropboxapi.com/2/files/download",
+    "data": "",
+    "headers": { "Dropbox-API-Arg": "{\"path\":\"/documents/renamed-away.pdf\"}" }
+  },
+  "response": {
+    "status": 409,
+    "data": {
+      "error_summary": "path/not_found/...",
+      "error": { ".tag": "path", "path": { ".tag": "not_found" } }
+    }
+  }
+}

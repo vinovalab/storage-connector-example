@@ -1,0 +1,7 @@
+{
+  "request": { "method": "GET", "url": "https://www.googleapis.com/drive/v3/files/D-deleted", "params": { "alt": "media" } },
+  "response": {
+    "status": 404,
+    "data": { "error": { "code": 404, "message": "File not found: D-deleted.", "errors": [{ "reason": "notFound" }] } }
+  }
+}

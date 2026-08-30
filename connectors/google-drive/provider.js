@@ -15,7 +15,7 @@
 // with a special mime type, and native documents that are exported rather than
 // downloaded. Anyone writing a new connector should start from Dropbox.
 
-const { BaseProvider } = require("@vinovalab/storage-connector-contract");
+const { BaseProvider, fileNotFound } = require("@vinovalab/storage-connector-contract");
 
 const API = "https://www.googleapis.com/drive/v3";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -201,15 +201,25 @@ class GoogleDriveProvider extends BaseProvider {
   }
 
   async downloadFile(fileId, mimeType, _options = {}) {
-    const exportAs = EXPORTS[mimeType];
-    if (exportAs) {
-      const data = await this._get(`/files/${encodeURIComponent(fileId)}/export`, { mimeType: exportAs }, { responseType: "arraybuffer" });
-      // The mime type returned is the **export's**: the caller writes a PDF, not
-      // a Google document.
-      return { buffer: Buffer.from(data), mimeType: exportAs };
+    // The download happens long after the synchronisation that stored this id —
+    // by then the file may have been deleted or moved out of reach. Drive says
+    // so with a 404; the host only understands `fileNotFound`, and with it can
+    // schedule a re-discovery instead of marking the document broken for good.
+    try {
+      const exportAs = EXPORTS[mimeType];
+      if (exportAs) {
+        const data = await this._get(`/files/${encodeURIComponent(fileId)}/export`, { mimeType: exportAs }, { responseType: "arraybuffer" });
+        // The mime type returned is the **export's**: the caller writes a PDF,
+        // not a Google document.
+        return { buffer: Buffer.from(data), mimeType: exportAs };
+      }
+      const data = await this._get(`/files/${encodeURIComponent(fileId)}`, { alt: "media" }, { responseType: "arraybuffer" });
+      return { buffer: Buffer.from(data), mimeType };
+    } catch (err) {
+      const status = err?.status || err?.response?.status;
+      if (status === 404) throw fileNotFound(`Drive no longer has ${fileId}`, { cause: err });
+      throw err;
     }
-    const data = await this._get(`/files/${encodeURIComponent(fileId)}`, { alt: "media" }, { responseType: "arraybuffer" });
-    return { buffer: Buffer.from(data), mimeType };
   }
 
   async getChanges(cursor = null) {

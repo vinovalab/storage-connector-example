@@ -31,6 +31,13 @@ module.exports = {
     expectedMimeType: "application/pdf",
   },
 
+  // A file deleted after the synchronisation stored its identifier. Drive ids
+  // survive renames, but not deletion — and the download happens later.
+  missingFile: {
+    fileId: "D-deleted",
+    mimeType: "application/pdf",
+  },
+
   changes: {
     cursor: "12345",
     expectedUpdatedIds: ["D-notes"],

@@ -29,6 +29,12 @@ a Google account.
 Shortcuts, forms, maps and sites are skipped: they live in Drive, they have no
 content, and downloading them fails on every run.
 
+A fourth one is not specific to Drive but bites here too: the download happens
+long after the synchronisation that stored the id, and by then the file may have
+been deleted. Drive answers 404; the connector turns that into `fileNotFound()`
+from the contract, so the host can schedule a re-discovery instead of marking the
+document broken for good.
+
 ## Variables
 
 | key | where to find it |

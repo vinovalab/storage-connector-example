@@ -44,6 +44,14 @@ module.exports = {
     expectedMimeType: "application/pdf",
   },
 
+  // A file that was renamed after the synchronisation stored its identifier.
+  // On Dropbox the id **is** the path, so a rename is enough: the download that
+  // happens hours later asks for something that no longer exists.
+  missingFile: {
+    fileId: "/documents/renamed-away.pdf",
+    mimeType: "application/pdf",
+  },
+
   changes: {
     cursor: "cursor-1",
     expectedUpdatedIds: ["/documents/minutes.docx"],

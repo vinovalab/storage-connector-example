@@ -98,3 +98,18 @@ test("[invariant] renewing keeps the refresh token", async () => {
   assert.equal(provider.credentials.access_token, "new-token");
   assert.equal(provider.credentials.refresh_token, "r-1");
 });
+
+test("[invariant] a deleted file is reported as missing", async () => {
+  // Drive ids survive renames and moves, but not deletion — and the download
+  // happens long after the synchronisation that stored the id.
+  const { isFileNotFound } = require("@vinovalab/storage-connector-contract");
+  await assert.rejects(
+    () => createProvider().downloadFile("D-deleted", "application/pdf", {}),
+    (err) => {
+      assert.equal(isFileNotFound(err), true);
+      assert.equal(err.status, 404);
+      assert.match(err.message, /D-deleted/);
+      return true;
+    },
+  );
+});

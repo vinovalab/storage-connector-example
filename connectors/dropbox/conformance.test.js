@@ -92,3 +92,20 @@ test("[invariant] an expiring token is renewed before the call, not after the 40
     "thirty seconds to expiry is inside the margin: renew first, or the 401 lands halfway through a synchronisation");
   assert.ok(provider.takeRefreshedCredentials(), "and the host must be able to persist it");
 });
+
+test("[invariant] a renamed file is reported as missing, with Dropbox's 409", async () => {
+  // The identifier here **is** the path, and the download happens long after the
+  // synchronisation that stored it: a rename in between is enough. Dropbox does
+  // not answer 404 — it answers 409 with `path/not_found` — and translating that
+  // is the connector's job, not the host's.
+  const { isFileNotFound } = require("@vinovalab/storage-connector-contract");
+  await assert.rejects(
+    () => createProvider().downloadFile("/documents/renamed-away.pdf", "application/pdf", {}),
+    (err) => {
+      assert.equal(isFileNotFound(err), true, "the host has to recognise it without knowing Dropbox's dialect");
+      assert.equal(err.status, 404);
+      assert.match(err.message, /renamed-away/, "the log has to say which file");
+      return true;
+    },
+  );
+});

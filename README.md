@@ -52,6 +52,7 @@ It is not a formality: these are the ways connectors actually break.
 | file and folder shapes | `modified` instead of `modifiedAt`: null dates found weeks later |
 | `takeRefreshedCredentials()` | the token renewed in memory and never stored: the connection dies on restart |
 | `fileBelongsToFolder` on path providers | sub-folders that never synchronise anything |
+| a vanished file surfaces as `fileNotFound` | a renamed file marked permanently broken, or an empty download reaching the index |
 | a 429 does not become an empty list | the host reading "folder emptied" and deleting indexed documents |
 
 ## The two examples, and why they differ
