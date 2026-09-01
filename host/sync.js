@@ -1,125 +1,124 @@
 "use strict";
 
-// Il giro completo: e questo che nessuna fixture puo verificare.
+// The full round: this is what no fixture can verify.
 //
-// La conformita controlla la **forma** di getChanges contro risposte
-// registrate. Non puo dire che il connettore non riscarichi l'intero archivio a
-// ogni sincronizzazione: quello si vede solo con un account vero, ed e uno dei
-// tre errori che il contratto esiste per prevenire.
+// Conformance checks the **shape** of getChanges against recorded responses. It
+// cannot tell you that a connector does not re-download the whole archive on
+// every synchronisation: that only shows against a real account, and it is one
+// of the three mistakes the contract exists to prevent.
 //
-// La regola, dal contratto: `getChanges(null)` **non** elenca tutto. Restituisce
-// il cursore di partenza e `isInitial: true`. La scansione completa la fa
-// l'ospite, la prima volta e una volta sola; un connettore che risponde con
-// tutto la fa fare due volte.
+// The rule, from the contract: `getChanges(null)` does **not** list everything.
+// It returns the starting cursor and `isInitial: true`. The full scan is the
+// host's job, the first time and once only; a connector that answers with
+// everything makes it happen twice.
 //
-// Quindi:
-//   primo giro   → scansione completa + getChanges(null) per il cursore
-//   giri seguenti→ getChanges(cursore) → scarica i modificati, toglie i tolti
+//   first pass  → full scan + getChanges(null) for the cursor
+//   later passes→ getChanges(cursor) → download the changed, remove the deleted
 
 const fs = require("fs");
 const path = require("path");
-const { costruisci, persistiRinnovo } = require("./provider");
-const stato = require("./state");
+const { build, persistRefresh } = require("./provider");
+const state = require("./state");
 
-const DESTINAZIONE = path.join(__dirname, "..", ".sync");
+const DESTINATION = path.join(__dirname, "..", ".sync");
 
-function percorsoLocale(dir, file) {
-  // L'identificatore puo essere un percorso (Dropbox) o opaco (Drive): in
-  // entrambi i casi si appiattisce in un nome di file, perche qui interessa
-  // vedere che il contenuto e arrivato, non ricostruire l'albero.
-  const nome = String(file.name || file.id).replace(/[^\w.\-]+/g, "_").slice(-120);
-  return path.join(DESTINAZIONE, dir, `${nome}`);
+function localPath(dir, file) {
+  // The identifier can be a path (Dropbox) or opaque (Drive): either way it is
+  // flattened into a file name, because what matters here is seeing that the
+  // content arrived, not rebuilding the tree.
+  const name = String(file.name || file.id).replace(/[^\w.\-]+/g, "_").slice(-120);
+  return path.join(DESTINATION, dir, name);
 }
 
-async function scarica(dir, provider, file, esito) {
+async function download(dir, provider, file, result) {
   try {
     const { buffer, mimeType } = await provider.downloadFile(file.id, file.mimeType, {});
-    const destinazione = percorsoLocale(dir, file);
-    fs.mkdirSync(path.dirname(destinazione), { recursive: true });
-    fs.writeFileSync(destinazione, buffer);
-    esito.scaricati.push({ id: file.id, name: file.name ?? null, bytes: buffer.length, mimeType });
-  } catch (errore) {
-    esito.errori.push({ id: file.id, messaggio: errore?.message || String(errore) });
+    const destination = localPath(dir, file);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, buffer);
+    result.downloaded.push({ id: file.id, name: file.name ?? null, bytes: buffer.length, mimeType });
+  } catch (error) {
+    result.errors.push({ id: file.id, message: error?.message || String(error) });
   }
 }
 
-async function sincronizza(dir, { folderId }) {
-  const inizio = Date.now();
-  const { provider, manifest } = costruisci(dir);
-  const connessione = stato.connessione(dir) || {};
-  const cursorePrecedente = connessione.cursor || null;
+async function synchronise(dir, { folderId }) {
+  const started = Date.now();
+  const { provider, manifest } = build(dir);
+  const connection = state.connection(dir) || {};
+  const previousCursor = connection.cursor || null;
 
-  const esito = {
-    modo: cursorePrecedente ? "incrementale" : "completo",
+  const result = {
+    mode: previousCursor ? "incremental" : "full",
     folderId,
-    scaricati: [],
-    rimossi: [],
-    errori: [],
-    cursorePrecedente,
-    cursore: null,
-    credenzialiRinnovate: false,
+    downloaded: [],
+    removed: [],
+    errors: [],
+    previousCursor,
+    cursor: null,
+    credentialsRenewed: false,
   };
 
   try {
-    if (!cursorePrecedente) {
-      // Prima volta: la scansione la fa l'ospite.
-      const elenca = manifest.capabilities?.deltaSync !== false && typeof provider.listFilesRecursive === "function"
+    if (!previousCursor) {
+      // First time: the scan is the host's job.
+      const list = typeof provider.listFilesRecursive === "function"
         ? provider.listFilesRecursive.bind(provider)
         : provider.listFiles.bind(provider);
-      const file = await elenca(folderId);
-      esito.trovati = (file || []).length;
-      for (const f of file || []) await scarica(dir, provider, f, esito);
+      const files = await list(folderId);
+      result.found = (files || []).length;
+      for (const f of files || []) await download(dir, provider, f, result);
 
-      // E poi il cursore di partenza, che NON elenca nulla.
+      // And then the starting cursor, which lists nothing.
       if (manifest.capabilities?.deltaSync) {
-        const partenza = await provider.getChanges(null);
-        esito.cursore = partenza?.nextPageToken ?? null;
-        esito.isInitial = partenza?.isInitial === true;
-        if (Array.isArray(partenza?.changes) && partenza.changes.length > 0) {
-          // Va detto: e l'errore che raddoppia ogni prima sincronizzazione.
-          esito.avvisi = [
-            `getChanges(null) ha restituito ${partenza.changes.length} modifiche. Il contratto vuole che `
-            + "restituisca solo il cursore di partenza: la scansione completa la fa l'ospite, e cosi la fa due volte.",
+        const start = await provider.getChanges(null);
+        result.cursor = start?.nextPageToken ?? null;
+        result.isInitial = start?.isInitial === true;
+        if (Array.isArray(start?.changes) && start.changes.length > 0) {
+          // Worth saying: this is the mistake that doubles every first sync.
+          result.warnings = [
+            `getChanges(null) returned ${start.changes.length} changes. The contract wants it to return `
+            + "the starting cursor only: the full scan is the host's job, and this way it happens twice.",
           ];
         }
       }
     } else {
-      const delta = await provider.getChanges(cursorePrecedente);
-      esito.cursore = delta?.nextPageToken ?? cursorePrecedente;
-      const modifiche = Array.isArray(delta?.changes) ? delta.changes : [];
-      esito.viste = modifiche.length;
+      const delta = await provider.getChanges(previousCursor);
+      result.cursor = delta?.nextPageToken ?? previousCursor;
+      const changes = Array.isArray(delta?.changes) ? delta.changes : [];
+      result.seen = changes.length;
 
-      for (const modifica of modifiche) {
-        const appartiene = provider.fileBelongsToFolder(
-          modifica.file || modifica,
+      for (const change of changes) {
+        const belongs = provider.fileBelongsToFolder(
+          change.file || change,
           { provider_folder_id: folderId, recursive: true },
         );
-        if (!appartiene) continue;
+        if (!belongs) continue;
 
-        if (modifica.type === "deleted" || modifica.deleted) {
-          const destinazione = percorsoLocale(dir, modifica.file || modifica);
-          if (fs.existsSync(destinazione)) fs.unlinkSync(destinazione);
-          esito.rimossi.push({ id: (modifica.file || modifica).id });
+        if (change.type === "deleted" || change.deleted) {
+          const destination = localPath(dir, change.file || change);
+          if (fs.existsSync(destination)) fs.unlinkSync(destination);
+          result.removed.push({ id: (change.file || change).id });
         } else {
-          await scarica(dir, provider, modifica.file || modifica, esito);
+          await download(dir, provider, change.file || change, result);
         }
       }
     }
 
-    esito.credenzialiRinnovate = persistiRinnovo(dir, provider);
-    stato.salvaConnessione(dir, { cursor: esito.cursore, folderId, ultimaSync: new Date().toISOString() });
-    esito.ok = true;
-  } catch (errore) {
-    // Anche in errore le credenziali rinnovate vanno salvate: il rinnovo puo
-    // essere riuscito e la chiamata successiva no, e ripeterlo brucia il
-    // refresh token dei provider che lo ruotano.
-    esito.credenzialiRinnovate = persistiRinnovo(dir, provider);
-    esito.ok = false;
-    esito.errore = errore?.message || String(errore);
+    result.credentialsRenewed = persistRefresh(dir, provider);
+    state.saveConnection(dir, { cursor: result.cursor, folderId, lastSync: new Date().toISOString() });
+    result.ok = true;
+  } catch (error) {
+    // Renewed credentials must be saved even on failure: the renewal may have
+    // succeeded and the call after it failed, and repeating it burns the refresh
+    // token of providers that rotate it.
+    result.credentialsRenewed = persistRefresh(dir, provider);
+    result.ok = false;
+    result.error = error?.message || String(error);
   }
 
-  esito.durata = Date.now() - inizio;
-  return esito;
+  result.duration = Date.now() - started;
+  return result;
 }
 
-module.exports = { sincronizza, DESTINAZIONE };
+module.exports = { synchronise, DESTINATION };

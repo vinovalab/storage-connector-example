@@ -1,237 +1,252 @@
 "use strict";
 
-// L'ospite minimo: la versione piu piccola di storage-connector-service che
-// serva a provare un connettore per intero.
+// The minimal host: the smallest version of storage-connector-service that is
+// enough to run a connector end to end.
 //
-// Non ha database, non ha autenticazione, non parla con nessun altro servizio.
-// Non e una semplificazione per pigrizia: e la condizione perche un
-// collaboratore faccia `npm start` e veda il proprio connettore girare. Un
-// ospite che chiede Postgres e un ospite che non viene mai avviato.
+// No database, no authentication, no other service. That is not laziness: it is
+// the condition for a collaborator to run `npm start` and see their connector
+// work. A host that asks for Postgres is a host nobody starts.
 //
-// Cio che invece rispetta alla lettera sono le regole del contratto, perche
-// sono la ragione per cui esiste:
-//   * i connettori si scoprono leggendo la cartella, mai un elenco;
-//   * si legge il manifesto, non il codice;
-//   * le credenziali rinnovate si persistono una volta;
-//   * getChanges(null) da il cursore, non l'archivio.
+// What it does keep, to the letter, are the contract's rules, because they are
+// the reason it exists:
+//   * connectors are discovered by reading the directory, never a list;
+//   * the manifest is read, not the code;
+//   * refreshed credentials are persisted once;
+//   * getChanges(null) gives the cursor, not the archive.
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 
-const RADICE = path.join(__dirname, "..");
+const ROOT = path.join(__dirname, "..");
 
-// Le variabili stanno nel .env della radice, lo stesso che legge
-// scripts/record.js. Nessun export a mano: e la prima cosa che si dimentica.
-const fileEnv = path.join(RADICE, ".env");
-if (fs.existsSync(fileEnv) && typeof process.loadEnvFile === "function") {
-  try { process.loadEnvFile(fileEnv); } catch { /* gia caricato */ }
+// The variables live in the root .env, the same file scripts/record.js reads.
+// No exporting by hand: it is the first thing people forget.
+const envFile = path.join(ROOT, ".env");
+if (fs.existsSync(envFile) && typeof process.loadEnvFile === "function") {
+  try { process.loadEnvFile(envFile); } catch { /* already loaded */ }
 }
 
-// Prima di ogni altra cosa: il contratto c'e?
+// Before anything else: is the contract there?
 //
-// Senza, Node lancia un MODULE_NOT_FOUND con uno stack di sei righe che non
-// dice cosa fare. E la stessa installazione mancante che si e gia presentata
-// come 404 di npm e come "Cannot find module axios": vale la pena spenderci
-// dieci righe una volta sola.
+// Without it Node throws MODULE_NOT_FOUND with a six-line stack that does not
+// say what to do. It is the same missing install that has already shown up as an
+// npm 404 and as "Cannot find module axios": worth ten lines, once.
 try {
   require.resolve("@vinovalab/storage-connector-contract");
 } catch {
   console.error("");
-  console.error("  @vinovalab/storage-connector-contract non e installato.");
+  console.error("  @vinovalab/storage-connector-contract is not installed.");
   console.error("");
-  console.error("  L'installazione va fatta nella RADICE del repository, non solo in web/:");
+  console.error("  The install goes in the ROOT of the repository, not only in web/:");
   console.error("");
-  console.error("    cp .npmrc.example .npmrc     # senza, npm cerca su npmjs e risponde 404");
-  console.error("    set -a; . ./.env; set +a     # NODE_AUTH_TOKEN, che npm non legge da solo");
+  console.error("    cp .npmrc.example .npmrc     # without it npm asks npmjs and gets a 404");
+  console.error("    set -a; . ./.env; set +a     # NODE_AUTH_TOKEN, which npm does not read on its own");
   console.error("    npm install");
   console.error("");
-  console.error("  Il token sta nei dettagli della challenge su collaborators.vinovalab.ai");
-  console.error("  e gli serve read:packages.");
+  console.error("  The token is in your challenge details on collaborators.vinovalab.ai");
+  console.error("  and it needs read:packages.");
   console.error("");
   process.exit(1);
 }
 
-const { leggiRegistro } = require("./registry");
-const { costruisci, persistiRinnovo } = require("./provider");
-const { sincronizza, DESTINAZIONE } = require("./sync");
-const stato = require("./state");
-const { eseguiConformita } = require("./conformance");
+const { readRegistry } = require("./registry");
+const { build, persistRefresh } = require("./provider");
+const { synchronise, DESTINATION } = require("./sync");
+const state = require("./state");
+const { runConformance } = require("./conformance");
 
-const PORTA = Number(process.env.HOST_PORT || 5191);
+const PORT = Number(process.env.HOST_PORT || 5191);
 const app = express();
 app.use(express.json());
 
-// Gli stati OAuth in attesa: legano la risposta del provider alla richiesta
-// partita da qui. Senza, questa pagina accetterebbe un codice da chiunque.
-const statiAttesi = new Map();
+// Pending OAuth states: they tie the provider's answer to a request that started
+// here. Without one, this page would accept a code from anyone.
+const pendingStates = new Map();
 
-function trovaConnettore(dir) {
-  return leggiRegistro().connettori.find((c) => c.dir === dir) || null;
+function findConnector(dir) {
+  return readRegistry().connectors.find((c) => c.dir === dir) || null;
 }
 
-// ── Registro ────────────────────────────────────────────────────────────────
+// ── Registry ────────────────────────────────────────────────────────────────
 
 app.get("/api/connectors", (_req, res) => {
-  const { connettori, rifiutati } = leggiRegistro();
+  const { connectors, rejected } = readRegistry();
   res.json({
-    data: connettori.map((c) => ({
+    data: connectors.map((c) => ({
       ...c,
-      connessione: (() => {
-        const s = stato.connessione(c.dir);
+      connection: (() => {
+        const s = state.connection(c.dir);
         return {
-          autorizzato: Boolean(s?.credentials?.access_token),
-          haRefresh: Boolean(s?.credentials?.refresh_token),
+          authorised: Boolean(s?.credentials?.access_token),
+          hasRefresh: Boolean(s?.credentials?.refresh_token),
           folderId: s?.folderId ?? null,
-          cursore: s?.cursor ?? null,
-          ultimaSync: s?.ultimaSync ?? null,
+          cursor: s?.cursor ?? null,
+          lastSync: s?.lastSync ?? null,
         };
       })(),
     })),
-    rifiutati,
+    rejected,
   });
 });
 
-// ── Conformita, sulle risposte registrate ───────────────────────────────────
+// ── Conformance, against recorded responses ─────────────────────────────────
 
 app.post("/api/connectors/:dir/test", async (req, res) => {
-  const c = trovaConnettore(req.params.dir);
-  if (!c) return res.status(404).json({ error: "Connettore sconosciuto." });
-  res.json({ data: await eseguiConformita(c.dir) });
+  const c = findConnector(req.params.dir);
+  if (!c) return res.status(404).json({ error: "Unknown connector." });
+  res.json({ data: await runConformance(c.dir) });
 });
 
-// ── Autorizzazione ──────────────────────────────────────────────────────────
+// ── Authorisation ───────────────────────────────────────────────────────────
 
 app.get("/api/connectors/:dir/auth-url", (req, res) => {
-  const c = trovaConnettore(req.params.dir);
-  if (!c) return res.status(404).json({ error: "Connettore sconosciuto." });
-  if (!c.abilitato) {
-    return res.status(409).json({ error: `Configurazione incompleta: ${c.configMancante.join(", ")}. Vanno nel .env della radice.` });
+  const c = findConnector(req.params.dir);
+  if (!c) return res.status(404).json({ error: "Unknown connector." });
+  if (!c.enabled) {
+    return res.status(409).json({ error: `Incomplete configuration: ${c.missingConfig.join(", ")}. They go in the root .env.` });
   }
   try {
-    const { provider } = costruisci(c.dir);
-    const chiave = crypto.randomBytes(16).toString("hex");
-    statiAttesi.set(chiave, c.dir);
-    res.json({ data: { url: provider.getAuthUrl(chiave), redirectPath: c.redirectPath } });
-  } catch (errore) {
-    res.status(400).json({ error: errore?.message || String(errore) });
+    const { provider } = build(c.dir);
+    const key = crypto.randomBytes(16).toString("hex");
+    pendingStates.set(key, c.dir);
+    res.json({ data: { url: provider.getAuthUrl(key), redirectPath: c.redirectPath } });
+  } catch (error) {
+    res.status(400).json({ error: error?.message || String(error) });
   }
 });
 
-// Il ritorno dal provider. Il percorso lo dichiara il manifesto, quindi non e
-// uno solo: si cerca quale connettore lo rivendica.
+// The return from the provider. The path is declared by the manifest, so there
+// is not just one: the connector claiming it is looked up.
 app.get(/^\/oauth\/.+/, async (req, res) => {
-  const c = leggiRegistro().connettori.find((x) => x.redirectPath === req.path);
-  const pagina = (titolo, corpo) => res.type("html").send(
-    `<!doctype html><meta charset="utf-8"><title>${titolo}</title>`
+  const c = readRegistry().connectors.find((x) => x.redirectPath === req.path);
+  const page = (title, body) => res.type("html").send(
+    `<!doctype html><meta charset="utf-8"><title>${title}</title>`
     + `<body style="font:15px/1.6 system-ui;max-width:44rem;margin:4rem auto;padding:0 1rem;color:#253f3a">`
-    + corpo + `<p><a href="/">Torna alla pagina</a></p></body>`);
+    + body + `<p><a href="/">Back to the page</a></p></body>`);
 
-  if (!c) return res.status(404).type("html").send("Nessun connettore dichiara questo percorso di ritorno.");
-  if (req.query.error) return pagina("Autorizzazione rifiutata", `<h1>Autorizzazione rifiutata</h1><p>Il provider ha risposto <code>${req.query.error}</code>.</p>`);
+  if (!c) return res.status(404).type("html").send("No connector declares this callback path.");
+  if (req.query.error) return page("Authorisation refused", `<h1>Authorisation refused</h1><p>The provider answered <code>${req.query.error}</code>.</p>`);
 
-  const chiave = String(req.query.state || "");
-  if (!req.query.code || statiAttesi.get(chiave) !== c.dir) {
-    return pagina("Richiesta non riconosciuta",
-      "<h1>Richiesta non riconosciuta</h1><p>Manca il codice, oppure lo stato non corrisponde a nessuna autorizzazione avviata da qui.</p>");
+  const key = String(req.query.state || "");
+  if (!req.query.code || pendingStates.get(key) !== c.dir) {
+    return page("Request not recognised",
+      "<h1>Request not recognised</h1><p>The code is missing, or the state does not match any authorisation started from here.</p>");
   }
-  statiAttesi.delete(chiave);
+  pendingStates.delete(key);
 
   try {
-    const { provider } = costruisci(c.dir);
-    const credenziali = await provider.exchangeCode(String(req.query.code));
-    stato.salvaConnessione(c.dir, { credentials: credenziali || {} });
-    return pagina("Autorizzato", `<h1>Autorizzato</h1><p><strong>${c.label}</strong> ha rilasciato le credenziali.`
-      + (credenziali?.refresh_token
-        ? " Con refresh token."
-        : " <em>Senza</em> refresh token: la connessione morira alla scadenza, in silenzio. E uno dei tre errori che il contratto esiste per prevenire.")
+    const { provider } = build(c.dir);
+    const credentials = await provider.exchangeCode(String(req.query.code));
+    state.saveConnection(c.dir, { credentials: credentials || {} });
+    return page("Authorised", `<h1>Authorised</h1><p><strong>${c.label}</strong> released the credentials.`
+      + (credentials?.refresh_token
+        ? " With a refresh token."
+        : " <em>Without</em> a refresh token: the connection will die at expiry, silently. It is one of the three mistakes the contract exists to prevent.")
       + `</p>`);
-  } catch (errore) {
-    return pagina("Scambio non riuscito", `<h1>Scambio non riuscito</h1><p>${String(errore?.message || errore)}</p>`);
+  } catch (error) {
+    return page("Exchange failed", `<h1>Exchange failed</h1><p>${String(error?.message || error)}</p>`);
   }
 });
 
 app.delete("/api/connectors/:dir/connection", (req, res) => {
-  stato.dimenticaConnessione(req.params.dir);
-  res.json({ data: { dimenticata: true } });
+  state.forgetConnection(req.params.dir);
+  res.json({ data: { forgotten: true } });
 });
 
-// ── Connessione viva ────────────────────────────────────────────────────────
+// ── Live connection ─────────────────────────────────────────────────────────
 
 app.post("/api/connectors/:dir/live", async (req, res) => {
-  const c = trovaConnettore(req.params.dir);
-  if (!c) return res.status(404).json({ error: "Connettore sconosciuto." });
-  if (!c.abilitato) return res.status(409).json({ error: `Configurazione incompleta: ${c.configMancante.join(", ")}.` });
-  if (!stato.connessione(c.dir)?.credentials?.access_token) {
-    return res.status(409).json({ error: "Nessuna credenziale: autorizza il connettore." });
+  const c = findConnector(req.params.dir);
+  if (!c) return res.status(404).json({ error: "Unknown connector." });
+  if (!c.enabled) return res.status(409).json({ error: `Incomplete configuration: ${c.missingConfig.join(", ")}.` });
+  if (!state.connection(c.dir)?.credentials?.access_token) {
+    return res.status(409).json({ error: "No credentials: authorise the connector first." });
   }
 
-  const inizio = Date.now();
-  const passi = [];
-  const { provider } = costruisci(c.dir);
+  const started = Date.now();
+  const steps = [];
+  const { provider } = build(c.dir);
   try {
-    // Due chiamate e non una: testConnection puo passare con permessi
-    // insufficienti a leggere, e un elenco vuoto si scopre solo chiedendolo.
-    const esito = await provider.testConnection();
-    passi.push({ nome: "testConnection", ok: true, dettaglio: JSON.stringify(esito ?? null).slice(0, 300) });
-    const cartelle = await provider.listFolders(null);
-    passi.push({ nome: "listFolders(null)", ok: true, dettaglio: `${(cartelle || []).length} cartelle` });
-    persistiRinnovo(c.dir, provider);
-    res.json({ data: { ok: true, passi, durata: Date.now() - inizio } });
-  } catch (errore) {
-    persistiRinnovo(c.dir, provider);
-    passi.push({ nome: passi.length ? "listFolders(null)" : "testConnection", ok: false, dettaglio: errore?.message || String(errore) });
-    res.json({ data: { ok: false, passi, durata: Date.now() - inizio } });
+    // Two calls and not one: testConnection can pass with permissions too narrow
+    // to read anything, and an empty listing only shows when you ask for it.
+    const result = await provider.testConnection();
+    steps.push({ name: "testConnection", ok: true, detail: JSON.stringify(result ?? null).slice(0, 300) });
+    const folders = await provider.listFolders(null);
+    steps.push({ name: "listFolders(null)", ok: true, detail: `${(folders || []).length} folders` });
+    persistRefresh(c.dir, provider);
+    res.json({ data: { ok: true, steps, duration: Date.now() - started } });
+  } catch (error) {
+    persistRefresh(c.dir, provider);
+    steps.push({ name: steps.length ? "listFolders(null)" : "testConnection", ok: false, detail: error?.message || String(error) });
+    res.json({ data: { ok: false, steps, duration: Date.now() - started } });
   }
 });
 
-// ── Cartelle e sincronizzazione ─────────────────────────────────────────────
+// ── Folders and synchronisation ─────────────────────────────────────────────
 
 app.get("/api/connectors/:dir/folders", async (req, res) => {
-  const c = trovaConnettore(req.params.dir);
-  if (!c) return res.status(404).json({ error: "Connettore sconosciuto." });
+  const c = findConnector(req.params.dir);
+  if (!c) return res.status(404).json({ error: "Unknown connector." });
+  // A connector that is off says so. Without this the provider is built anyway
+  // and fails deep inside with something like "access token is missing", which
+  // sends whoever reads it looking for a token instead of a variable.
+  if (!c.enabled) return res.status(409).json({ error: `Incomplete configuration: ${c.missingConfig.join(", ")}.` });
   try {
-    const { provider } = costruisci(c.dir);
-    const cartelle = await provider.listFolders(req.query.parentId ? String(req.query.parentId) : null);
-    persistiRinnovo(c.dir, provider);
-    res.json({ data: cartelle || [] });
-  } catch (errore) {
-    res.status(502).json({ error: errore?.message || String(errore) });
+    const { provider } = build(c.dir);
+    const folders = await provider.listFolders(req.query.parentId ? String(req.query.parentId) : null);
+    persistRefresh(c.dir, provider);
+    res.json({ data: folders || [] });
+  } catch (error) {
+    res.status(502).json({ error: error?.message || String(error) });
   }
 });
 
 app.post("/api/connectors/:dir/sync", async (req, res) => {
-  const c = trovaConnettore(req.params.dir);
-  if (!c) return res.status(404).json({ error: "Connettore sconosciuto." });
-  const folderId = req.body?.folderId ?? stato.connessione(c.dir)?.folderId ?? null;
+  const c = findConnector(req.params.dir);
+  if (!c) return res.status(404).json({ error: "Unknown connector." });
+  if (!c.enabled) return res.status(409).json({ error: `Incomplete configuration: ${c.missingConfig.join(", ")}.` });
+  const folderId = req.body?.folderId ?? state.connection(c.dir)?.folderId ?? null;
   if (folderId === null || folderId === undefined) {
-    return res.status(400).json({ error: "Scegli prima una cartella da monitorare." });
+    return res.status(400).json({ error: "Choose a folder to monitor first." });
   }
-  res.json({ data: await sincronizza(c.dir, { folderId }) });
+  res.json({ data: await synchronise(c.dir, { folderId }) });
 });
 
-// Ricomincia da capo: dimentica il cursore e i file scaricati. Serve a
-// riprovare la prima sincronizzazione senza rifare l'autorizzazione.
+// Start over: forget the cursor and the downloaded files. It is for retrying the
+// first synchronisation without redoing the authorisation.
 app.post("/api/connectors/:dir/reset", (req, res) => {
-  const corrente = stato.connessione(req.params.dir) || {};
-  stato.salvaConnessione(req.params.dir, { cursor: null, folderId: corrente.folderId ?? null });
-  const cartella = path.join(DESTINAZIONE, req.params.dir);
-  if (fs.existsSync(cartella)) fs.rmSync(cartella, { recursive: true, force: true });
-  res.json({ data: { azzerato: true } });
+  const current = state.connection(req.params.dir) || {};
+  state.saveConnection(req.params.dir, { cursor: null, folderId: current.folderId ?? null });
+  const folder = path.join(DESTINATION, req.params.dir);
+  if (fs.existsSync(folder)) fs.rmSync(folder, { recursive: true, force: true });
+  res.json({ data: { reset: true } });
 });
 
-// La pagina costruita, se c'e: cosi `npm run build && npm start` e un processo
-// solo. In sviluppo ci si arriva dal dev server di Vite, che fa da proxy.
-const dist = path.join(RADICE, "web", "dist");
+// The built page, if there is one: `npm run build && npm start` is then a single
+// process. In development you reach it through the Vite dev server, which proxies.
+const dist = path.join(ROOT, "web", "dist");
 if (fs.existsSync(dist)) app.use(express.static(dist));
 
-app.listen(PORTA, () => {
-  const { connettori, rifiutati } = leggiRegistro();
-  console.log(`storage-connector-host su http://localhost:${PORTA}`);
-  for (const c of connettori) {
-    console.log(`  ${c.key}${c.abilitato ? "" : `  spento — manca ${c.configMancante.join(", ")}`}`);
+// A JSON API must never answer in HTML. Express's default handler renders a
+// page, and a malformed body — or any unhandled throw — reaches the caller as
+// markup it cannot parse, on top of whatever went wrong.
+// eslint-disable-next-line no-unused-vars
+app.use((error, req, res, _next) => {
+  const status = error?.status && error.status >= 400 && error.status < 600 ? error.status : 500;
+  if (req.path.startsWith("/api/")) {
+    return res.status(status).json({ error: error?.message || "Unexpected error." });
   }
-  for (const r of rifiutati) console.log(`  ${r.dir}  RIFIUTATO — ${r.motivo}`);
-  if (!fs.existsSync(dist)) console.log("  (web/dist assente: usa il dev server di Vite in web/)");
+  res.status(status).type("text/plain").send(error?.message || "Unexpected error.");
+});
+
+app.listen(PORT, () => {
+  const { connectors, rejected } = readRegistry();
+  console.log(`storage-connector-host on http://localhost:${PORT}`);
+  for (const c of connectors) {
+    console.log(`  ${c.key}${c.enabled ? "" : `  off — missing ${c.missingConfig.join(", ")}`}`);
+  }
+  for (const r of rejected) console.log(`  ${r.dir}  REJECTED — ${r.reason}`);
+  if (!fs.existsSync(dist)) console.log("  (web/dist absent: use the Vite dev server in web/)");
 });

@@ -1,39 +1,39 @@
 "use strict";
 
-// La suite del connettore, eseguita dall'ospite.
+// The connector's own suite, run by the host.
 //
-// Si lancia quella vera — `conformance.test.js` — e non una seconda
-// implementazione dei controlli: due definizioni di "funziona" divergono, e
-// allora il pulsante e la CI direbbero cose diverse.
+// It runs the real one — `conformance.test.js` — and not a second
+// implementation of the checks: two definitions of "working" drift apart, and
+// then the button and CI say different things.
 
 const { execFile } = require("child_process");
 const path = require("path");
 
-const RADICE = path.join(__dirname, "..");
+const ROOT = path.join(__dirname, "..");
 
-function eseguiConformita(dir) {
+function runConformance(dir) {
   const file = path.join("connectors", dir, "conformance.test.js");
   return new Promise((resolve) => {
-    const inizio = Date.now();
-    execFile("node", ["--test", file], { cwd: RADICE, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 },
-      (errore, stdout, stderr) => {
+    const started = Date.now();
+    execFile("node", ["--test", file], { cwd: ROOT, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 },
+      (error, stdout, stderr) => {
         const output = `${stdout}${stderr}`;
-        const numero = (etichetta) => {
-          const trovato = output.match(new RegExp(`^# ${etichetta} (\\d+)$`, "m"));
-          return trovato ? Number(trovato[1]) : 0;
+        const count = (label) => {
+          const found = output.match(new RegExp(`^# ${label} (\\d+)$`, "m"));
+          return found ? Number(found[1]) : 0;
         };
-        const fail = numero("fail");
+        const fail = count("fail");
         resolve({
-          // Il codice di uscita e l'autorita: un conteggio a zero puo anche
-          // voler dire che la suite non e partita affatto.
-          ok: !errore && fail === 0,
-          pass: numero("pass"),
+          // The exit code is the authority: a count of zero can also mean the
+          // suite never started.
+          ok: !error && fail === 0,
+          pass: count("pass"),
           fail,
-          durata: Date.now() - inizio,
+          duration: Date.now() - started,
           output: output.trim(),
         });
       });
   });
 }
 
-module.exports = { eseguiConformita };
+module.exports = { runConformance };

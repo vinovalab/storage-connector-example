@@ -68,10 +68,10 @@ async function main() {
   const env = Object.fromEntries(manifest.config.map((v) => [v.key, process.env[v.key]]));
   const missing = manifest.config.filter((v) => v.required && !env[v.key]).map((v) => v.key);
 
-  // Il token dell'account non sta nel manifest — quello dichiara la
-  // configurazione dell'applicazione, non le credenziali di chi la usa — ma
-  // senza non si registra niente: le chiamate partono e il provider risponde
-  // 401, che sembra un token sbagliato invece di un token assente.
+  // The account token is not in the manifest — that declares the application's
+  // configuration, not the credentials of whoever uses it — but nothing is
+  // recorded without it: the calls go out and the provider answers 401, which
+  // looks like a wrong token rather than an absent one.
   if (!process.env.CONNECTOR_ACCESS_TOKEN) missing.push("CONNECTOR_ACCESS_TOKEN");
 
   if (missing.length) {

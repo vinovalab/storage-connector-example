@@ -1,24 +1,23 @@
 "use strict";
 
-// Costruire un provider come lo costruisce il servizio vero.
+// Building a provider the way the real service builds one.
 //
-// Due regole del contratto vivono qui, e sono due dei tre errori per cui il
-// contratto esiste:
+// Two rules of the contract live here, and they are two of the three mistakes
+// the contract exists to prevent:
 //
-//   * ogni chiamata passa da `this.http`. E anche il solo punto in cui l'ospite
-//     applica timeout e comportamento sugli errori;
-//   * dopo ogni operazione si chiama `takeRefreshedCredentials()` e si persiste
-//     cio che restituisce, **una volta**. Un connettore che rinnova il token e
-//     un ospite che non lo salva producono una connessione che muore alla
-//     scadenza successiva, in silenzio.
+//   * every call goes through `this.http`. It is also the only place where the
+//     host applies timeouts and decides how errors behave;
+//   * after every operation `takeRefreshedCredentials()` is called and whatever
+//     it returns is persisted, **once**. A connector that renews its token and a
+//     host that does not save it produce a connection that dies at the next
+//     expiry, silently.
 
-const path = require("path");
 const axios = require("axios");
-const { caricaConnettore } = require("./registry");
-const stato = require("./state");
+const { loadConnector } = require("./registry");
+const state = require("./state");
 
-// Lo stesso client di scripts/record.js: axios sagomato come il contratto si
-// aspetta, con gli stati di errore che rifiutano portandosi dietro la risposta.
+// The same client as scripts/record.js: axios shaped the way the contract
+// expects, with error statuses rejecting and carrying the response.
 const http = async (config) => axios({ ...config, validateStatus: () => true, timeout: 30_000 })
   .then((r) => {
     if (r.status >= 400) {
@@ -30,14 +29,14 @@ const http = async (config) => axios({ ...config, validateStatus: () => true, ti
     return r;
   });
 
-function costruisci(dir) {
-  const { manifest, Provider } = caricaConnettore(dir);
+function build(dir) {
+  const { manifest, Provider } = loadConnector(dir);
   const env = {};
-  for (const voce of manifest.config || []) env[voce.key] = process.env[voce.key];
+  for (const entry of manifest.config || []) env[entry.key] = process.env[entry.key];
 
-  const salvata = stato.connessione(dir);
+  const saved = state.connection(dir);
   const provider = new Provider({
-    credentials: salvata?.credentials || {},
+    credentials: saved?.credentials || {},
     env,
     http,
     logger: { info() {}, warning() {}, error() {} },
@@ -46,14 +45,14 @@ function costruisci(dir) {
   return { provider, manifest };
 }
 
-// Da chiamare dopo ogni operazione. Non e una cortesia: e la meta dell'ospite
-// nel patto sul rinnovo delle credenziali.
-function persistiRinnovo(dir, provider) {
-  const nuove = provider.takeRefreshedCredentials?.();
-  if (!nuove) return false;
-  const corrente = stato.connessione(dir)?.credentials || {};
-  stato.salvaConnessione(dir, { credentials: { ...corrente, ...nuove } });
+// To be called after every operation. It is not a courtesy: it is the host's
+// half of the bargain on credential renewal.
+function persistRefresh(dir, provider) {
+  const renewed = provider.takeRefreshedCredentials?.();
+  if (!renewed) return false;
+  const current = state.connection(dir)?.credentials || {};
+  state.saveConnection(dir, { credentials: { ...current, ...renewed } });
   return true;
 }
 
-module.exports = { costruisci, persistiRinnovo, http };
+module.exports = { build, persistRefresh, http };

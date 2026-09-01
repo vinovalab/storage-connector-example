@@ -15,46 +15,46 @@ h1 { margin: 6px 0 10px; font-size: 2.1rem; }
 header p { margin: 0; max-width: 60ch; color: #536864; }
 code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .88em; }
 
-.attesa { color: #687b79; }
-.errore { background: #fee7e5; color: #9a2c25; padding: 11px 14px; border-radius: 9px; }
-.avviso { background: #fdf1dc; color: #8a5b12; padding: 9px 12px; border-radius: 8px; font-size: .84rem; }
-.vuoto { border: 1px dashed #cbd9d6; border-radius: 14px; padding: 32px; color: #536864; }
-.vuoto h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.loading { color: #687b79; }
+.error-box { background: #fee7e5; color: #9a2c25; padding: 11px 14px; border-radius: 9px; }
+.warning { background: #fdf1dc; color: #8a5b12; padding: 9px 12px; border-radius: 8px; font-size: .84rem; }
+.empty { border: 1px dashed #cbd9d6; border-radius: 14px; padding: 32px; color: #536864; }
+.empty h2 { margin: 0 0 6px; font-size: 1.05rem; }
 
-.elenco { display: grid; gap: 18px; }
-.connettore {
+.list { display: grid; gap: 18px; }
+.connector {
   display: grid; gap: 12px;
   background: white; border: 1px solid #dce7e4; border-radius: 16px; padding: 22px;
   box-shadow: 0 10px 30px rgba(20, 65, 59, .05);
 }
-.intestazione { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.intestazione h2 { margin: 0 0 4px; font-size: 1.15rem; }
-.chiave { color: #0c6158; font-weight: 700; }
-.contratto { margin-left: 10px; color: #82928f; font-size: .74rem; }
-.descrizione { margin: 0; color: #536864; }
+.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.heading h2 { margin: 0 0 4px; font-size: 1.15rem; }
+.key { color: #0c6158; font-weight: 700; }
+.contract { margin-left: 10px; color: #82928f; font-size: .74rem; }
+.description { margin: 0; color: #536864; }
 
-.capacita { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.capacita li {
+.capabilities { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.capabilities li {
   border: 1px solid #dce7e4; border-radius: 20px; padding: 3px 11px;
   color: #536864; font-size: .74rem;
 }
 
-/* Il tastone: e l'unica cosa da fare in questa pagina, e si vede. */
-.tastone {
+/* The big button: it is the one thing to do on this page, and it shows. */
+.primary-button {
   width: 100%; border: 0; border-radius: 12px; padding: 16px;
   background: #0c6158; color: white;
   font: inherit; font-size: 1rem; font-weight: 750; cursor: pointer;
 }
-.tastone:hover:not(:disabled) { background: #0a544c; }
-.tastone:disabled { opacity: .45; cursor: default; }
+.primary-button:hover:not(:disabled) { background: #0a544c; }
+.primary-button:disabled { opacity: .45; cursor: default; }
 
-.esito { border-radius: 20px; padding: 4px 12px; font-size: .76rem; font-weight: 750; white-space: nowrap; }
-.esito.verde { background: #dff4e9; color: #176343; }
-.esito.rosso { background: #fee7e5; color: #9a2c25; }
-.rosso { color: #9a2c25; }
+.verdict { border-radius: 20px; padding: 4px 12px; font-size: .76rem; font-weight: 750; white-space: nowrap; }
+.verdict.green { background: #dff4e9; color: #176343; }
+.verdict.red { background: #fee7e5; color: #9a2c25; }
+.red { color: #9a2c25; }
 
-.riepilogo { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; color: #687b79; font-size: .82rem; }
-.collegamento { margin-left: auto; border: 0; background: transparent; color: #0c7166; font: inherit; font-weight: 700; cursor: pointer; }
+.summary { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; color: #687b79; font-size: .82rem; }
+.link-button { margin-left: auto; border: 0; background: transparent; color: #0c7166; font: inherit; font-weight: 700; cursor: pointer; }
 
 .output {
   max-height: 420px; overflow: auto; margin: 0;
@@ -63,39 +63,39 @@ code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .88em; }
   white-space: pre-wrap; word-break: break-word;
 }
 
-/* Le due prove non sono la stessa cosa e non devono sembrarlo: la conformita e
-   il gesto principale, la connessione reale sta sotto e richiede credenziali. */
-.legenda { margin: 14px 0 0; padding-left: 20px; color: #536864; }
-.legenda li { margin-bottom: 6px; }
-.legenda strong { color: #253f3a; }
+/* The two tests are not the same thing and must not look alike: conformance is
+   the main gesture, the live connection sits below and needs credentials. */
+.legend { margin: 14px 0 0; padding-left: 20px; color: #536864; }
+.legend li { margin-bottom: 6px; }
+.legend strong { color: #253f3a; }
 
-.reali { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.tasto-secondario {
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.secondary-button {
   border: 1px solid #aac2bd; border-radius: 10px; background: white; color: #174f48;
   padding: 9px 14px; font: inherit; font-size: .86rem; font-weight: 700; cursor: pointer;
 }
-.tasto-secondario:hover:not(:disabled) { border-color: #7fa9a1; }
-.tasto-secondario:disabled { opacity: .45; cursor: default; }
-.stato-cred { color: #82928f; font-size: .76rem; }
+.secondary-button:hover:not(:disabled) { border-color: #7fa9a1; }
+.secondary-button:disabled { opacity: .45; cursor: default; }
+.credential-state { color: #82928f; font-size: .76rem; }
 
 .live { border-radius: 12px; padding: 12px 14px; font-size: .84rem; }
-.live.verde { background: #edf8f6; color: #09675e; }
-.live.rosso { background: #fdf1ef; color: #9a2c25; }
+.live.green { background: #edf8f6; color: #09675e; }
+.live.red { background: #fdf1ef; color: #9a2c25; }
 .live ul { margin: 0; padding-left: 18px; }
 .live li { margin-bottom: 4px; }
 .live li span { display: block; color: inherit; opacity: .75; font-size: .78rem; word-break: break-word; }
 .live small { display: block; margin-top: 8px; opacity: .7; font-size: .72rem; }
 .live p { margin: 0; }
 
-/* I quattro passi in ordine: la pagina si legge dall'alto in basso come la si
-   percorre. Ogni passo dice a cosa serve prima di offrire il pulsante. */
-.passo { border-top: 1px solid #e6efed; padding-top: 14px; margin-top: 4px; }
-.passo h3 { margin: 0 0 4px; font-size: .82rem; font-weight: 800;
+/* The four steps in order: the page reads top to bottom the way you walk it.
+   Each step says what it is for before offering the button. */
+.step { border-top: 1px solid #e6efed; padding-top: 14px; margin-top: 4px; }
+.step h3 { margin: 0 0 4px; font-size: .82rem; font-weight: 800;
   letter-spacing: .04em; text-transform: uppercase; color: #0c7166; }
-.passo .nota { margin: 0 0 12px; max-width: 62ch; color: #536864; font-size: .85rem; }
-.scelta { display: grid; gap: 6px; max-width: 30rem; margin-bottom: 12px;
+.step .note { margin: 0 0 12px; max-width: 62ch; color: #536864; font-size: .85rem; }
+.choice { display: grid; gap: 6px; max-width: 30rem; margin-bottom: 12px;
   font-size: .82rem; font-weight: 700; }
-.scelta select { border: 1px solid #cbd9d6; border-radius: 9px; padding: 9px; background: white; font: inherit; }
-.rifiutati { background: #fdf1ef; color: #9a2c25; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
-.rifiutati ul { margin: 6px 0 0; padding-left: 20px; }
-.verde { color: #176343; }
+.choice select { border: 1px solid #cbd9d6; border-radius: 9px; padding: 9px; background: white; font: inherit; }
+.rejected { background: #fdf1ef; color: #9a2c25; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
+.rejected ul { margin: 6px 0 0; padding-left: 20px; }
+.green { color: #176343; }

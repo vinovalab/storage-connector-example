@@ -1,83 +1,82 @@
 "use strict";
 
-// Il registro dei connettori: si legge la cartella, non un elenco scritto a mano.
+// The connector registry: it reads the directory, never a hand-written list.
 //
-// E la regola che rende questo repository un modello e non un esempio. Nel
-// servizio vero un connettore e **una cartella e basta**: `connectors/<nome>/`
-// con il suo manifesto e la sua classe, e copiarla dentro e tutta
-// l'installazione. Se questo ospite minimo tenesse un elenco da aggiornare, un
-// collaboratore imparerebbe esattamente il gesto che il contratto esiste per
-// eliminare.
+// This is the rule that makes the repository a model rather than an example. In
+// the real service a connector is **a folder and nothing else**:
+// `connectors/<name>/` with its manifest and its class, and copying it in is the
+// whole installation. If this minimal host kept a list to update, a collaborator
+// would learn exactly the gesture the contract exists to remove.
 //
-// Le tre regole di rifiuto sono quelle del servizio vero:
-//   * manifesto malformato — meglio all'avvio che in mano a un cliente;
-//   * major di contratto diversa — un connettore scritto su regole vecchie
-//     fallirebbe al primo delta, in silenzio;
-//   * chiave doppia — due cartelle che dichiarano DROPBOX sono un errore di
-//     copia, e vincerebbe l'ordine alfabetico, cioe il caso.
+// The three rejections are the ones the real service makes:
+//   * a malformed manifest — better at startup than in a customer's hands;
+//   * a different contract major — a connector written against old rules would
+//     fail at the first delta, silently;
+//   * a duplicate key — two folders declaring DROPBOX are a copy mistake, and
+//     alphabetical order would decide, which is to say chance.
 //
-// Un connettore a cui manca la configurazione **non viene rifiutato**: viene
-// caricato e marcato spento, con l'elenco di cio che gli manca. E la differenza
-// fra un connettore che non compare e nessuno sa perche, e uno che compare
-// spento dicendo quale variabile manca.
+// A connector missing its configuration is **not** rejected: it is loaded and
+// marked off, with the list of what is missing. That is the difference between a
+// connector that never appears and nobody knows why, and one that appears
+// switched off saying which variable it wants.
 
 const fs = require("fs");
 const path = require("path");
 const { compatible, missingConfig, CONTRACT_VERSION } = require("@vinovalab/storage-connector-contract");
 
-const CARTELLA = path.join(__dirname, "..", "connectors");
+const DIRECTORY = path.join(__dirname, "..", "connectors");
 
-function leggiRegistro() {
-  if (!fs.existsSync(CARTELLA)) return { connettori: [], rifiutati: [] };
+function readRegistry() {
+  if (!fs.existsSync(DIRECTORY)) return { connectors: [], rejected: [] };
 
-  const connettori = [];
-  const rifiutati = [];
-  const chiaviViste = new Map();
+  const connectors = [];
+  const rejected = [];
+  const keysSeen = new Map();
 
-  for (const voce of fs.readdirSync(CARTELLA, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!voce.isDirectory()) continue;
-    const dir = voce.name;
-    const base = path.join(CARTELLA, dir);
-    const fileManifest = path.join(base, "manifest.js");
-    const fileProvider = path.join(base, "provider.js");
+  for (const entry of fs.readdirSync(DIRECTORY, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory()) continue;
+    const dir = entry.name;
+    const base = path.join(DIRECTORY, dir);
+    const manifestFile = path.join(base, "manifest.js");
+    const providerFile = path.join(base, "provider.js");
 
-    if (!fs.existsSync(fileManifest)) {
-      rifiutati.push({ dir, motivo: "manca manifest.js" });
+    if (!fs.existsSync(manifestFile)) {
+      rejected.push({ dir, reason: "manifest.js is missing" });
       continue;
     }
-    if (!fs.existsSync(fileProvider)) {
-      rifiutati.push({ dir, motivo: "manca provider.js" });
+    if (!fs.existsSync(providerFile)) {
+      rejected.push({ dir, reason: "provider.js is missing" });
       continue;
     }
 
     let manifest;
     try {
-      // Rilettura a ogni giro: un connettore in scrittura cambia sotto le mani,
-      // e un manifesto in cache mostrerebbe la forma di ieri.
-      delete require.cache[require.resolve(fileManifest)];
-      manifest = require(fileManifest);
-    } catch (errore) {
-      rifiutati.push({ dir, motivo: `manifesto non valido: ${errore.message}` });
+      // Read again on every pass: a connector being written changes under your
+      // hands, and a cached manifest would show yesterday's shape.
+      delete require.cache[require.resolve(manifestFile)];
+      manifest = require(manifestFile);
+    } catch (error) {
+      rejected.push({ dir, reason: `invalid manifest: ${error.message}` });
       continue;
     }
 
     if (!compatible(manifest)) {
-      rifiutati.push({
+      rejected.push({
         dir,
-        motivo: `contratto ${manifest.contractVersion} incompatibile con ${CONTRACT_VERSION}`,
+        reason: `contract ${manifest.contractVersion} is not compatible with ${CONTRACT_VERSION}`,
       });
       continue;
     }
 
-    const gia = chiaviViste.get(manifest.key);
-    if (gia) {
-      rifiutati.push({ dir, motivo: `chiave ${manifest.key} gia dichiarata da ${gia}` });
+    const already = keysSeen.get(manifest.key);
+    if (already) {
+      rejected.push({ dir, reason: `key ${manifest.key} is already declared by ${already}` });
       continue;
     }
-    chiaviViste.set(manifest.key, dir);
+    keysSeen.set(manifest.key, dir);
 
-    const mancanti = missingConfig(manifest, process.env);
-    connettori.push({
+    const missing = missingConfig(manifest, process.env);
+    connectors.push({
       dir,
       key: manifest.key,
       label: manifest.label,
@@ -90,21 +89,21 @@ function leggiRegistro() {
         key: c.key, required: Boolean(c.required), secret: Boolean(c.secret),
         description: c.description ?? null,
       })),
-      // Spento, non assente.
-      abilitato: mancanti.length === 0,
-      configMancante: mancanti,
+      // Off, not absent.
+      enabled: missing.length === 0,
+      missingConfig: missing,
       hasSuite: fs.existsSync(path.join(base, "conformance.test.js")),
       hasFixtures: fs.existsSync(path.join(base, "fixtures")),
     });
   }
 
-  return { connettori, rifiutati };
+  return { connectors, rejected };
 }
 
-// Il manifesto e la classe, per chi deve costruire un provider. Il registro
-// legge il manifesto; solo qui si tocca il codice del connettore.
-function caricaConnettore(dir) {
-  const base = path.join(CARTELLA, dir);
+// The manifest and the class, for whoever has to build a provider. The registry
+// reads the manifest; only here is the connector's code touched.
+function loadConnector(dir) {
+  const base = path.join(DIRECTORY, dir);
   delete require.cache[require.resolve(path.join(base, "manifest.js"))];
   delete require.cache[require.resolve(path.join(base, "provider.js"))];
   return {
@@ -114,4 +113,4 @@ function caricaConnettore(dir) {
   };
 }
 
-module.exports = { leggiRegistro, caricaConnettore, CARTELLA };
+module.exports = { readRegistry, loadConnector, DIRECTORY };

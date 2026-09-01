@@ -1,16 +1,16 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// La pagina non ha piu un backend proprio: parla con l'ospite, che e lo stesso
-// processo che un collaboratore avvia con `npm start` nella radice. Prima le
-// rotte vivevano qui dentro, ed era comodo — ma insegnava che l'ospite e un
-// dettaglio del dev server, mentre e il contrario: e l'ospite la cosa da
-// imitare, e questa pagina e solo la sua interfaccia.
+// The page no longer has a backend of its own: it talks to the host, the same
+// process a collaborator starts with `npm start` in the root. The routes used to
+// live in here, which was convenient — but it taught that the host is a detail
+// of the dev server, when it is the other way round: the host is the thing to
+// imitate, and this page is only its interface.
 //
-// /oauth passa dal proxy come /api: cosi il redirect registrato nella console
-// del provider e uno solo, quello della pagina, e funziona sia in sviluppo sia
-// quando l'ospite serve la pagina costruita.
-const OSPITE = process.env.HOST_URL || "http://localhost:5191";
+// /oauth goes through the proxy like /api, so the redirect registered in the
+// provider's console is a single one — the page's — and it works both in
+// development and when the host serves the built page.
+const HOST = process.env.HOST_URL || "http://localhost:5191";
 
 export default defineConfig({
   plugins: [react()],
@@ -18,8 +18,8 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5190,
     proxy: {
-      "/api": { target: OSPITE, changeOrigin: true },
-      "/oauth": { target: OSPITE, changeOrigin: true },
+      "/api": { target: HOST, changeOrigin: true },
+      "/oauth": { target: HOST, changeOrigin: true },
     },
   },
 });

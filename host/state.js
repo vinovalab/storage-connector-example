@@ -1,51 +1,51 @@
 "use strict";
 
-// Lo stato dell'ospite: connessioni, cartella scelta, cursore.
+// The host's state: connections, chosen folder, cursor.
 //
-// Un file JSON e non un database. Il servizio vero usa Postgres, ma qui
-// l'obiettivo e che un collaboratore faccia `npm start` e basta: chiedergli di
-// far salire un database per provare il proprio connettore significa che non lo
-// provera.
+// A JSON file and not a database. The real service uses Postgres, but the point
+// here is that a collaborator runs `npm start` and nothing else: asking them to
+// stand up a database to try their own connector means they will not try it.
 //
-// Il file contiene **token vivi**, quindi e ignorato da git. La differenza fra
-// questo e il servizio vero non e la forma dei dati ma dove finiscono, ed e
-// scritto qui perche nessuno lo scopra copiando questo file in produzione.
+// The file holds **live tokens**, so it is git-ignored. The difference between
+// this and the real service is not the shape of the data but where it lands, and
+// it is written here so nobody discovers it by copying this file into
+// production.
 
 const fs = require("fs");
 const path = require("path");
 
 const FILE = path.join(__dirname, "..", ".host-state.json");
 
-function leggi() {
-  if (!fs.existsSync(FILE)) return { connessioni: {} };
+function read() {
+  if (!fs.existsSync(FILE)) return { connections: {} };
   try {
     return JSON.parse(fs.readFileSync(FILE, "utf8"));
   } catch {
-    // Un file corrotto non deve impedire di ripartire: si riparte da zero e si
-    // rifa l'autorizzazione, che e un fastidio, non un guasto.
-    return { connessioni: {} };
+    // A corrupt file must not stop the host from starting: it starts over and
+    // the authorisation is done again, which is a nuisance, not a failure.
+    return { connections: {} };
   }
 }
 
-function scrivi(stato) {
-  fs.writeFileSync(FILE, JSON.stringify(stato, null, 2) + "\n", { mode: 0o600 });
+function write(state) {
+  fs.writeFileSync(FILE, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
 }
 
-function connessione(dir) {
-  return leggi().connessioni[dir] || null;
+function connection(dir) {
+  return read().connections[dir] || null;
 }
 
-function salvaConnessione(dir, patch) {
-  const stato = leggi();
-  stato.connessioni[dir] = { ...(stato.connessioni[dir] || {}), ...patch };
-  scrivi(stato);
-  return stato.connessioni[dir];
+function saveConnection(dir, patch) {
+  const state = read();
+  state.connections[dir] = { ...(state.connections[dir] || {}), ...patch };
+  write(state);
+  return state.connections[dir];
 }
 
-function dimenticaConnessione(dir) {
-  const stato = leggi();
-  delete stato.connessioni[dir];
-  scrivi(stato);
+function forgetConnection(dir) {
+  const state = read();
+  delete state.connections[dir];
+  write(state);
 }
 
-module.exports = { leggi, connessione, salvaConnessione, dimenticaConnessione, FILE };
+module.exports = { read, connection, saveConnection, forgetConnection, FILE };
