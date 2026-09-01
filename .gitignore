@@ -1,7 +1,14 @@
 node_modules/
 npm-debug.log*
+.DS_Store
+dist/
+
+# Real secrets never get committed...
 .env
 .env.*
 .npmrc
-.DS_Store
-dist/
+
+# ...but the templates with the placeholders do. Without these two negations
+# `.env.*` would swallow `.env.example` and nobody would ever notice.
+!.env.example
+!.npmrc.example

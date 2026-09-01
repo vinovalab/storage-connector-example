@@ -6,9 +6,13 @@
 // credentials and a test account prepared as the scenario describes. From then
 // on conformance runs offline: in CI, on a reviewer's laptop, and months later.
 //
-//   GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
-//   CONNECTOR_ACCESS_TOKEN=... CONNECTOR_REFRESH_TOKEN=... \
-//   node scripts/record.js google-drive
+//   cp .env.example .env      # then fill it in
+//   npm run record -- google-drive
+//
+// The variables can also be passed on the command line, and they take
+// precedence over the file:
+//
+//   CONNECTOR_ACCESS_TOKEN=... node scripts/record.js google-drive
 //
 // Existing fixtures are **not** deleted: only the calls you make again are
 // overwritten. Read them before committing — they end up in a repository, and
@@ -17,8 +21,25 @@
 // token a provider decided to put somewhere else.
 
 const path = require("path");
+const fs = require("fs");
 const axios = require("axios");
 const { createRecordingTransport } = require("@vinovalab/storage-connector-contract");
+
+// The `.env` in the repository root, if there is one. `.env.example` is the
+// template to copy, and it is the only place the README tells anyone to put
+// these values: without this, that file would be a suggestion nothing reads.
+//
+// Variables already set in the environment win over the file, so a value can be
+// overridden for a single run without editing anything.
+const fileEnv = path.join(__dirname, "..", ".env");
+if (fs.existsSync(fileEnv)) {
+  if (typeof process.loadEnvFile === "function") {
+    process.loadEnvFile(fileEnv);
+  } else {
+    console.error(`Found ${fileEnv}, but this Node (${process.version}) cannot read it: use Node 20.12 or newer, or pass the variables on the command line.`);
+    process.exit(1);
+  }
+}
 
 const directory = process.argv[2];
 if (!directory) {

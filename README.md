@@ -26,37 +26,39 @@ repository is working and you need no account to go on.
 
 ### Where the tokens go
 
-There are **two different tokens**, and confusing them wastes an afternoon.
-
-**1. The package token — this is the one you need to run anything.**
-`@vinovalab/storage-connector-contract` is published to GitHub Packages, not to
-the public registry, so `npm install` fails with a `401` without it. It is the
-token issued with your challenge. Put it in an `.npmrc` in the repository root
-(`.npmrc` is already in `.gitignore`, so it cannot be committed by accident):
-
-```
-@vinovalab:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=THE-TOKEN-YOU-RECEIVED
-```
-
-The same file works in `~/.npmrc` if you would rather keep one copy for every
-repository.
-
-**2. The provider tokens — not needed for anything below.** `DROPBOX_APP_KEY`,
-`GOOGLE_OAUTH_CLIENT_ID`, an access token and a refresh token are needed only by
-`npm run record`, which is how fixtures are produced in the first place. They are
-passed as environment variables on that one command, never written into a file
-in the repository:
+Two files, both in the repository root, and neither of them is for you to invent:
+each one has a template committed beside it. Copy it and fill it in.
 
 ```bash
-GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
-GOOGLE_OAUTH_REDIRECT_URI=... \
-CONNECTOR_ACCESS_TOKEN=... CONNECTOR_REFRESH_TOKEN=... \
-npm run record -- google-drive
+cp .npmrc.example .npmrc     # the package token — needed to install anything
+cp .env.example .env         # the provider tokens — only to record fixtures
 ```
 
-If you prefer a file, `.env` and `.env.*` are ignored by git too. Each
-connector's own README lists the variables it needs and where to obtain them.
+`.env` and `.npmrc` are ignored by git; `.env.example` and `.npmrc.example` are
+committed. That takes an explicit negation in `.gitignore`, because the `.env.*`
+rule would otherwise swallow `.env.example` and no one would notice until a new
+arrival had nothing to copy.
+
+**1. `.npmrc` — the package token. This is the one you need to run anything.**
+`@vinovalab/storage-connector-contract` is published to GitHub Packages, not to
+the public registry, so `npm install` fails with a `401` without it. The token is
+the one issued with your challenge, and it needs `read:packages`. The same two
+lines work in `~/.npmrc` if you would rather keep one copy for every repository.
+
+**2. `.env` — the provider tokens, and you need none of them for anything on
+this page.** App keys, client ids and the account's access and refresh tokens are
+used only by `npm run record`, which is how fixtures are produced in the first
+place. `.env.example` lists every variable the two connectors declare, with the
+console page each value comes from and the two authorisation flags that are
+forgotten most often.
+
+`npm run record` reads that file on its own. A variable set in the shell wins
+over the file, so one value can be overridden for a single run without editing
+anything:
+
+```bash
+CONNECTOR_ACCESS_TOKEN=another-one npm run record -- dropbox
+```
 
 ## The Connection Test page
 
@@ -170,6 +172,9 @@ connectors/<name>/
   conformance.test.js  conformance plus the checks specific to the provider
 
 web/                   the Connection Test page (development tool, not shipped)
+
+.npmrc.example         template for the package token — copy to .npmrc
+.env.example           template for the provider tokens — copy to .env
 ```
 
 That directory, and only that directory, is what gets copied into the service.

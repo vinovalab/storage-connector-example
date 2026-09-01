@@ -1,0 +1,17 @@
+; Copy this file to `.npmrc` in the repository root and paste in your token:
+;
+;   cp .npmrc.example .npmrc
+;
+; `.npmrc` is ignored by git and must never be committed. This file, with the
+; placeholder, is the one that is committed.
+;
+; The token is the one issued with your challenge. It needs `read:packages`.
+; Without it `npm install` fails with a 401, because
+; @vinovalab/storage-connector-contract is published to GitHub Packages and not
+; to the public registry.
+;
+; The same two lines work in ~/.npmrc if you would rather keep one copy for
+; every repository.
+
+@vinovalab:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=PASTE-YOUR-TOKEN-HERE
