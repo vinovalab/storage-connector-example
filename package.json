@@ -5,11 +5,14 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test",
-    "record": "node scripts/record.js"
+    "dev": "node --watch host/server.js",
+    "record": "node scripts/record.js",
+    "start": "node host/server.js",
+    "test": "node --test"
   },
   "dependencies": {
-    "@vinovalab/storage-connector-contract": "1.0.1"
+    "@vinovalab/storage-connector-contract": "1.0.1",
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "axios": "^1.20.0"

@@ -1,107 +1,76 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-// One page, one button per connector. No login, and none is needed: every call
-// a connector makes goes through `this.http`, and the responses are recorded in
-// its fixtures. The test runs with no account and no network — which is the
-// whole point of the contract.
+// L'interfaccia dell'ospite. Il giro completo, nell'ordine in cui lo si fa:
+//
+//   Conformità → Autorizza → scegli cartella → Sync → cambia qualcosa → Sync
+//
+// L'ultimo passo è quello che nessuna fixture può verificare. La conformità
+// controlla la forma di getChanges contro risposte registrate; che il
+// connettore non riscarichi l'intero archivio a ogni giro si vede solo qui.
 
 type Connettore = {
-  dir: string;
-  key: string;
-  label: string;
-  description: string | null;
-  contractVersion: string | null;
-  authKind: string | null;
+  dir: string; key: string; label: string; description: string | null;
+  contractVersion: string; authKind: string | null; redirectPath: string | null;
   capabilities: Record<string, boolean>;
   config: Array<{ key: string; required: boolean; secret: boolean; description: string | null }>;
-  hasSuite: boolean;
-  hasFixtures: boolean;
-  error?: string;
+  abilitato: boolean; configMancante: string[];
+  hasSuite: boolean; hasFixtures: boolean;
+  connessione: {
+    autorizzato: boolean; haRefresh: boolean;
+    folderId: string | null; cursore: string | null; ultimaSync: string | null;
+  };
 };
 
-type Esito = { ok: boolean; pass: number; fail: number; durata: number; output: string };
-
+type Conformita = { ok: boolean; pass: number; fail: number; durata: number; output: string };
 type Passo = { nome: string; ok: boolean; dettaglio: string };
-type EsitoLive = {
-  ok: boolean; passi: Passo[]; durata: number;
-  origineCredenziali: string; errore?: string;
+type Live = { ok: boolean; passi: Passo[]; durata: number };
+type Cartella = { id: string; name?: string };
+type Sync = {
+  ok: boolean; modo: string; folderId: string;
+  scaricati: Array<{ id: string; name: string | null; bytes: number }>;
+  rimossi: Array<{ id: string }>;
+  errori: Array<{ id: string; messaggio: string }>;
+  trovati?: number; viste?: number;
+  cursorePrecedente: string | null; cursore: string | null;
+  credenzialiRinnovate: boolean; avvisi?: string[]; errore?: string; durata: number;
 };
-type StatoCredenziali = { autorizzato: boolean; scadenza: string | null; haRefresh: boolean };
+
+const json = async (url: string, init?: RequestInit) => {
+  const r = await fetch(url, init);
+  const p = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(p?.error || `HTTP ${r.status}`);
+  return p.data;
+};
 
 export default function App() {
   const [connettori, setConnettori] = useState<Connettore[] | null>(null);
+  const [rifiutati, setRifiutati] = useState<Array<{ dir: string; motivo: string }>>([]);
   const [errore, setErrore] = useState<string | null>(null);
   const [inCorso, setInCorso] = useState<string | null>(null);
-  const [esiti, setEsiti] = useState<Record<string, Esito>>({});
+  const [conformita, setConformita] = useState<Record<string, Conformita>>({});
+  const [live, setLive] = useState<Record<string, Live>>({});
+  const [cartelle, setCartelle] = useState<Record<string, Cartella[]>>({});
+  const [sync, setSync] = useState<Record<string, Sync>>({});
   const [apertura, setApertura] = useState<Record<string, boolean>>({});
-  const [live, setLive] = useState<Record<string, EsitoLive>>({});
-  const [cred, setCred] = useState<Record<string, StatoCredenziali>>({});
 
-  useEffect(() => {
+  const carica = useCallback(() => {
     fetch("/api/connectors")
       .then((r) => r.json())
-      .then((p) => {
-        setConnettori(p.data);
-        // Le credenziali stanno in memoria del dev server: dopo un riavvio non
-        // ci sono piu, e la pagina deve dirlo invece di mostrare un pulsante
-        // che fallira.
-        for (const c of p.data as Connettore[]) void aggiornaCredenziali(c.dir);
-      })
-      .catch((e) => setErrore(e instanceof Error ? e.message : "Cannot read the connectors."));
+      .then((p) => { setConnettori(p.data); setRifiutati(p.rifiutati || []); })
+      .catch(() => setErrore("L'ospite non risponde. Avvialo con `npm start` nella radice del repository."));
   }, []);
 
-  async function aggiornaCredenziali(dir: string) {
-    try {
-      const r = await fetch(`/api/connectors/${encodeURIComponent(dir)}/credentials`);
-      const p = await r.json();
-      setCred((precedenti) => ({ ...precedenti, [dir]: p.data }));
-    } catch { /* lo stato resta ignoto: i pulsanti restano disponibili */ }
-  }
+  useEffect(() => { carica(); }, [carica]);
 
-  async function autorizza(c: Connettore) {
-    setErrore(null);
-    try {
-      const r = await fetch(`/api/connectors/${encodeURIComponent(c.dir)}/auth-url`);
-      const p = await r.json();
-      if (!r.ok) throw new Error(p?.error || "Cannot build the authorisation URL.");
-      // Nuova scheda: al ritorno il dev server scrive la pagina di esito, e
-      // questa resta dov'era.
-      window.open(p.data.url, "_blank", "noopener");
-    } catch (e) {
-      setErrore(e instanceof Error ? e.message : "Cannot start the authorisation.");
-    }
-  }
+  const agisci = async (dir: string, azione: () => Promise<void>) => {
+    setInCorso(dir); setErrore(null);
+    try { await azione(); carica(); }
+    catch (e) { setErrore(e instanceof Error ? e.message : String(e)); }
+    finally { setInCorso(null); }
+  };
 
-  async function provaLive(c: Connettore) {
-    setInCorso(c.dir);
-    try {
-      const r = await fetch(`/api/connectors/${encodeURIComponent(c.dir)}/live`, { method: "POST" });
-      const p = await r.json();
-      if (!r.ok) throw new Error(p?.error || "The live test could not be started.");
-      setLive((precedenti) => ({ ...precedenti, [c.dir]: p.data }));
-      void aggiornaCredenziali(c.dir);
-    } catch (e) {
-      setErrore(e instanceof Error ? e.message : "The live test could not be started.");
-    } finally {
-      setInCorso(null);
-    }
-  }
-
-  async function prova(c: Connettore) {
-    setInCorso(c.dir);
-    try {
-      const risposta = await fetch(`/api/connectors/${encodeURIComponent(c.dir)}/test`, { method: "POST" });
-      const payload = await risposta.json();
-      if (!risposta.ok) throw new Error(payload?.error || "The test could not be started.");
-      setEsiti((precedenti) => ({ ...precedenti, [c.dir]: payload.data }));
-      // A failure is the reason you pressed the button: it opens by itself.
-      if (!payload.data.ok) setApertura((a) => ({ ...a, [c.dir]: true }));
-    } catch (e) {
-      setErrore(e instanceof Error ? e.message : "The test could not be started.");
-    } finally {
-      setInCorso(null);
-    }
-  }
+  if (errore && !connettori) return <main><p className="errore">{errore}</p></main>;
+  if (!connettori) return <main><p className="attesa">Caricamento…</p></main>;
 
   return (
     <main>
@@ -109,127 +78,209 @@ export default function App() {
         <span className="eyebrow">Storage connectors</span>
         <h1>Connection Test</h1>
         <p>
-          Two different questions, two different buttons.
+          Un ospite minimo: la versione più piccola di <code>storage-connector-service</code> che
+          serva a provare un connettore per intero. Nessun database, nessuna autenticazione.
         </p>
-        <ul className="legenda">
-          <li>
-            <strong>Conformance</strong> runs the connector's own suite — the one <code>npm test</code> runs —
-            against its <em>recorded</em> responses. No account, no credentials, no network: the replay
-            transport cannot reach one.
-          </li>
-          <li>
-            <strong>Live connection</strong> talks to the provider for real, with the variables in
-            <code>.env</code> and the credentials from the authorisation. It answers what fixtures never can:
-            whether these credentials still work.
-          </li>
-        </ul>
       </header>
 
       {errore && <p className="errore">{errore}</p>}
 
-      {!connettori ? <p className="attesa">Loading…</p>
-        : connettori.length === 0 ? (
-          <div className="vuoto">
-            <h2>No connectors found</h2>
-            <p>Add a directory under <code>connectors/</code> with a <code>manifest.js</code>.</p>
-          </div>
-        ) : (
-          <div className="elenco">
-            {connettori.map((c) => {
-              const esito = esiti[c.dir];
-              const provabile = c.hasSuite && !c.error;
-              return (
-                <article key={c.dir} className="connettore">
-                  <div className="intestazione">
-                    <div>
-                      <h2>{c.label}</h2>
-                      <code className="chiave">{c.key}</code>
-                      {c.contractVersion && <span className="contratto">contract {c.contractVersion}</span>}
-                    </div>
-                    {esito && (
-                      <span className={`esito ${esito.ok ? "verde" : "rosso"}`}>
-                        {esito.ok ? "Passed" : "Failed"}
-                      </span>
-                    )}
+      {rifiutati.length > 0 && (
+        <div className="rifiutati">
+          <strong>Connettori rifiutati dal registro</strong>
+          <ul>{rifiutati.map((r) => <li key={r.dir}><code>{r.dir}</code> — {r.motivo}</li>)}</ul>
+        </div>
+      )}
+
+      <div className="elenco">
+        {connettori.map((c) => {
+          const cn = c.connessione;
+          const occupato = inCorso !== null;
+          const esitoSync = sync[c.dir];
+          return (
+            <article key={c.dir} className="connettore">
+              <div className="intestazione">
+                <div>
+                  <h2>{c.label}</h2>
+                  <code className="chiave">{c.key}</code>
+                  <span className="contratto">contract {c.contractVersion}</span>
+                </div>
+                {!c.abilitato && <span className="esito rosso">spento</span>}
+              </div>
+
+              {c.description && <p className="descrizione">{c.description}</p>}
+
+              {!c.abilitato && (
+                <p className="avviso">
+                  Manca la configurazione: <code>{c.configMancante.join(", ")}</code>.
+                  Vanno nel <code>.env</code> della radice — copia <code>.env.example</code>.
+                </p>
+              )}
+
+              <ul className="capacita">
+                {c.authKind && <li>{c.authKind}</li>}
+                {Object.entries(c.capabilities).filter(([, v]) => v).map(([n]) => <li key={n}>{n}</li>)}
+              </ul>
+
+              {/* 1 — la conformità, sulle risposte registrate */}
+              <section className="passo">
+                <h3>1 · Conformità</h3>
+                <p className="nota">
+                  La suite del connettore sulle risposte registrate: nessun account, nessuna rete.
+                  Dice se il connettore rispetta il contratto.
+                </p>
+                <button className="tastone" disabled={!c.hasSuite || occupato}
+                  onClick={() => agisci(c.dir, async () => {
+                    const esito = await json(`/api/connectors/${c.dir}/test`, { method: "POST" });
+                    setConformita((p) => ({ ...p, [c.dir]: esito }));
+                  })}>
+                  {inCorso === c.dir ? "…" : "Esegui la conformità"}
+                </button>
+                {conformita[c.dir] && (
+                  <div className="riepilogo">
+                    <span className={conformita[c.dir].ok ? "verde" : "rosso"}>
+                      {conformita[c.dir].ok ? "passata" : "fallita"}
+                    </span>
+                    <span>{conformita[c.dir].pass} passati</span>
+                    {conformita[c.dir].fail > 0 && <span className="rosso">{conformita[c.dir].fail} falliti</span>}
+                    <button className="collegamento" onClick={() => setApertura((a) => ({ ...a, [c.dir]: !a[c.dir] }))}>
+                      {apertura[c.dir] ? "nascondi output" : "mostra output"}
+                    </button>
                   </div>
+                )}
+                {conformita[c.dir] && apertura[c.dir] && <pre className="output">{conformita[c.dir].output}</pre>}
+              </section>
 
-                  {c.description && <p className="descrizione">{c.description}</p>}
-
-                  <ul className="capacita">
-                    {c.authKind && <li>{c.authKind}</li>}
-                    {Object.entries(c.capabilities)
-                      .filter(([, attiva]) => attiva)
-                      .map(([nome]) => <li key={nome}>{nome}</li>)}
-                  </ul>
-
-                  {c.error && <p className="errore">manifest.js does not load: {c.error}</p>}
-                  {!c.error && !c.hasSuite && <p className="avviso">No <code>conformance.test.js</code> in this directory.</p>}
-                  {!c.error && c.hasSuite && !c.hasFixtures && (
-                    <p className="avviso">
-                      No <code>fixtures/</code>: record them with <code>npm run record -- {c.dir}</code>.
-                    </p>
-                  )}
-
-                  <button className="tastone" disabled={!provabile || inCorso !== null} onClick={() => prova(c)}>
-                    {inCorso === c.dir ? "Running…" : "Conformance — recorded"}
+              {/* 2 — l'autorizzazione */}
+              <section className="passo">
+                <h3>2 · Autorizzazione</h3>
+                <p className="nota">
+                  Apre il consenso del provider e riceve il ritorno su <code>{c.redirectPath}</code>,
+                  che è il percorso dichiarato nel manifesto. Deve combaciare con quello registrato
+                  nella console, o l'autorizzazione fallisce <em>dopo</em> il consenso.
+                </p>
+                <div className="reali">
+                  <button className="tasto-secondario" disabled={!c.abilitato || occupato}
+                    onClick={() => agisci(c.dir, async () => {
+                      const d = await json(`/api/connectors/${c.dir}/auth-url`);
+                      window.open(d.url, "_blank", "noopener");
+                    })}>
+                    {cn.autorizzato ? "Autorizza di nuovo" : "Autorizza"}
                   </button>
+                  {cn.autorizzato && (
+                    <button className="tasto-secondario" disabled={occupato}
+                      onClick={() => agisci(c.dir, async () => {
+                        await json(`/api/connectors/${c.dir}/connection`, { method: "DELETE" });
+                        setSync((p) => ({ ...p, [c.dir]: undefined as any }));
+                      })}>
+                      Dimentica
+                    </button>
+                  )}
+                  <span className="stato-cred">
+                    {cn.autorizzato
+                      ? (cn.haRefresh ? "autorizzato, con refresh token" : "autorizzato, senza refresh token — morirà alla scadenza")
+                      : "non autorizzato"}
+                  </span>
+                </div>
+              </section>
 
-                  <div className="reali">
-                    <button className="tasto-secondario" disabled={inCorso !== null} onClick={() => autorizza(c)}>
-                      {cred[c.dir]?.autorizzato ? "Authorise again" : "Authorise"}
-                    </button>
-                    <button className="tasto-secondario" disabled={inCorso !== null} onClick={() => provaLive(c)}>
-                      Live connection
-                    </button>
-                    {cred[c.dir] && (
-                      <span className="stato-cred">
-                        {cred[c.dir].autorizzato
-                          ? (cred[c.dir].haRefresh
-                              ? "authorised, with refresh token"
-                              : "authorised, no refresh token — it will die at expiry")
-                          : "not authorised in this session"}
-                      </span>
-                    )}
+              {/* 3 — la connessione viva */}
+              <section className="passo">
+                <h3>3 · Connessione</h3>
+                <p className="nota">
+                  <code>testConnection</code> e poi <code>listFolders(null)</code>: due chiamate e non una,
+                  perché la prima può passare con permessi troppo stretti per leggere qualcosa.
+                </p>
+                <button className="tasto-secondario" disabled={!cn.autorizzato || occupato}
+                  onClick={() => agisci(c.dir, async () => {
+                    const esito = await json(`/api/connectors/${c.dir}/live`, { method: "POST" });
+                    setLive((p) => ({ ...p, [c.dir]: esito }));
+                    const elenco = await json(`/api/connectors/${c.dir}/folders`);
+                    setCartelle((p) => ({ ...p, [c.dir]: elenco }));
+                  })}>
+                  Prova la connessione
+                </button>
+                {live[c.dir] && (
+                  <div className={`live ${live[c.dir].ok ? "verde" : "rosso"}`}>
+                    <ul>
+                      {live[c.dir].passi.map((p) => (
+                        <li key={p.nome}><strong>{p.ok ? "✓" : "✗"} {p.nome}</strong><span>{p.dettaglio}</span></li>
+                      ))}
+                    </ul>
                   </div>
+                )}
+              </section>
 
-                  {live[c.dir] && (
-                    <div className={`live ${live[c.dir].ok ? "verde" : "rosso"}`}>
-                      {live[c.dir].errore
-                        ? <p>{live[c.dir].errore}</p>
-                        : (
-                          <ul>
-                            {live[c.dir].passi.map((passo) => (
-                              <li key={passo.nome}>
-                                <strong>{passo.ok ? "✓" : "✗"} {passo.nome}</strong>
-                                <span>{passo.dettaglio}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      <small>
-                        credentials from: {live[c.dir].origineCredenziali} · {(live[c.dir].durata / 1000).toFixed(1)}s
-                      </small>
-                    </div>
+              {/* 4 — il giro completo */}
+              <section className="passo">
+                <h3>4 · Sincronizzazione</h3>
+                <p className="nota">
+                  Il primo giro scarica tutto e chiede il cursore di partenza. I successivi chiedono
+                  solo il delta. <strong>Se il secondo giro riscarica tutto, il connettore è sbagliato</strong> —
+                  ed è l'unica prova che le fixture non possono dare.
+                </p>
+
+                {cartelle[c.dir] && cartelle[c.dir].length > 0 && (
+                  <label className="scelta">
+                    Cartella da monitorare
+                    <select defaultValue={cn.folderId ?? ""} disabled={occupato}
+                      onChange={(e) => agisci(c.dir, async () => {
+                        const esito = await json(`/api/connectors/${c.dir}/sync`, {
+                          method: "POST", headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ folderId: e.target.value }),
+                        });
+                        setSync((p) => ({ ...p, [c.dir]: esito }));
+                      })}>
+                      <option value="" disabled>scegli…</option>
+                      {cartelle[c.dir].map((f) => <option key={f.id} value={f.id}>{f.name || f.id}</option>)}
+                    </select>
+                  </label>
+                )}
+
+                <div className="reali">
+                  <button className="tastone" disabled={!cn.autorizzato || !cn.folderId || occupato}
+                    onClick={() => agisci(c.dir, async () => {
+                      const esito = await json(`/api/connectors/${c.dir}/sync`, { method: "POST" });
+                      setSync((p) => ({ ...p, [c.dir]: esito }));
+                    })}>
+                    {cn.cursore ? "Sincronizza (incrementale)" : "Sincronizza (primo giro)"}
+                  </button>
+                  {cn.cursore && (
+                    <button className="tasto-secondario" disabled={occupato}
+                      onClick={() => agisci(c.dir, async () => {
+                        await json(`/api/connectors/${c.dir}/reset`, { method: "POST" });
+                        setSync((p) => ({ ...p, [c.dir]: undefined as any }));
+                      })}>
+                      Ricomincia da capo
+                    </button>
                   )}
+                </div>
 
-                  {esito && (
-                    <div className="riepilogo">
-                      <span>{esito.pass} passed</span>
-                      {esito.fail > 0 && <span className="rosso">{esito.fail} failed</span>}
-                      <span>{(esito.durata / 1000).toFixed(1)}s</span>
-                      <button className="collegamento"
-                        onClick={() => setApertura((a) => ({ ...a, [c.dir]: !a[c.dir] }))}>
-                        {apertura[c.dir] ? "Hide output" : "Show output"}
-                      </button>
-                    </div>
-                  )}
-
-                  {esito && apertura[c.dir] && <pre className="output">{esito.output}</pre>}
-                </article>
-              );
-            })}
-          </div>
-        )}
+                {esitoSync && (
+                  <div className={`live ${esitoSync.ok ? "verde" : "rosso"}`}>
+                    <p>
+                      <strong>giro {esitoSync.modo}</strong>
+                      {esitoSync.trovati !== undefined && ` · ${esitoSync.trovati} file trovati`}
+                      {esitoSync.viste !== undefined && ` · ${esitoSync.viste} modifiche viste`}
+                      {` · ${esitoSync.scaricati.length} scaricati`}
+                      {esitoSync.rimossi.length > 0 && ` · ${esitoSync.rimossi.length} rimossi`}
+                      {esitoSync.credenzialiRinnovate && " · credenziali rinnovate e salvate"}
+                    </p>
+                    {esitoSync.errore && <p>{esitoSync.errore}</p>}
+                    {esitoSync.avvisi?.map((a) => <p key={a} className="avviso">{a}</p>)}
+                    {esitoSync.scaricati.length > 0 && (
+                      <ul>{esitoSync.scaricati.slice(0, 12).map((f) => (
+                        <li key={f.id}><strong>{f.name || f.id}</strong><span>{f.bytes} byte</span></li>
+                      ))}</ul>
+                    )}
+                    <small>i file finiscono in <code>.sync/{c.dir}/</code></small>
+                  </div>
+                )}
+              </section>
+            </article>
+          );
+        })}
+      </div>
     </main>
   );
 }

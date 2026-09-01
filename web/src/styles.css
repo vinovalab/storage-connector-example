@@ -86,3 +86,16 @@ code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .88em; }
 .live li span { display: block; color: inherit; opacity: .75; font-size: .78rem; word-break: break-word; }
 .live small { display: block; margin-top: 8px; opacity: .7; font-size: .72rem; }
 .live p { margin: 0; }
+
+/* I quattro passi in ordine: la pagina si legge dall'alto in basso come la si
+   percorre. Ogni passo dice a cosa serve prima di offrire il pulsante. */
+.passo { border-top: 1px solid #e6efed; padding-top: 14px; margin-top: 4px; }
+.passo h3 { margin: 0 0 4px; font-size: .82rem; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: #0c7166; }
+.passo .nota { margin: 0 0 12px; max-width: 62ch; color: #536864; font-size: .85rem; }
+.scelta { display: grid; gap: 6px; max-width: 30rem; margin-bottom: 12px;
+  font-size: .82rem; font-weight: 700; }
+.scelta select { border: 1px solid #cbd9d6; border-radius: 9px; padding: 9px; background: white; font: inherit; }
+.rifiutati { background: #fdf1ef; color: #9a2c25; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
+.rifiutati ul { margin: 6px 0 0; padding-left: 20px; }
+.verde { color: #176343; }

@@ -76,133 +76,94 @@ page each value comes from and the two authorisation flags that are forgotten
 most often.
 
 `npm run record` reads that file on its own — no exporting needed, that part is
-only npm's limitation. A variable set in the shell wins over the file, so one
-value can be overridden for a single run without editing anything:
+only npm's limitation.
+
+Recording needs three things, and the token is one of them:
+
+1. **The application's variables** — `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`,
+   `DROPBOX_REDIRECT_URI` for Dropbox. They identify the app, not the account.
+2. **The account's tokens** — `CONNECTOR_ACCESS_TOKEN`, and
+   `CONNECTOR_REFRESH_TOKEN` if the connector renews credentials, which
+   conformance checks. The Authorise button on the Connection Test page is the
+   simplest way to obtain both.
+3. **A `scenario.js` that describes your account.** The one shipped describes
+   ours: `/Documents` with four files across two pages, a sub-folder, a file to
+   download, one renamed and one deleted after a cursor. Recording against an
+   account that does not match it produces fixtures conformance then rejects,
+   and the failure looks like a broken connector rather than a stale scenario.
+
+Then:
+
+```bash
+npm run record -- dropbox
+```
+
+The script stops and lists everything missing before making a single call. A
+variable set in the shell wins over the file, so one value can be overridden for
+a single run without editing anything — that is what this is, not a complete
+invocation:
 
 ```bash
 CONNECTOR_ACCESS_TOKEN=another-one npm run record -- dropbox
 ```
 
-## The Connection Test page
+## The minimal host
 
-A one-page tool to run both connectors without a terminal:
+The smallest version of `storage-connector-service` that is enough to run a
+connector end to end. No database, no authentication, no other service: a
+collaborator who has to stand up Postgres to try their own connector never tries
+it.
 
 ```bash
-npm install          # in the repository root — see below
-cd web
-npm install
-npm run dev
+npm install          # in the repository root
+npm start            # the host, on http://localhost:5191
+
+cd web && npm install && npm run dev   # the page, on http://localhost:5190
 ```
 
-Then open <http://localhost:5190>.
+The page is only the host's interface: it proxies `/api` and `/oauth` to it. If
+you would rather have one process, `cd web && npm run build` and the host serves
+the page itself on 5191.
 
-**The install in the root is not optional**, and it is the one people skip: each
-connector's `manifest.js` imports the contract package, so without the root
-`node_modules` the page loads but every connector shows an error instead of its
-capabilities.
+What it does keep from the real service are the rules, because they are the
+reason the contract exists:
 
-Three buttons per directory under `connectors/`, and they answer different
-questions.
+- connectors are **discovered by reading the directory**, never a list. A new
+  connector is a folder and nothing else;
+- the host reads the **manifest**, not the code;
+- a connector missing its configuration is **loaded and switched off, with the
+  list of what is missing** — not made to disappear;
+- refreshed credentials are persisted **once**, after every operation;
+- `getChanges(null)` is asked for the starting cursor, and the first full scan is
+  the host's job.
 
-**Conformance — recorded.** Runs that connector's `conformance.test.js`, the same
-suite `npm test` runs rather than a second implementation of the checks. It needs
-no account, no credentials and no network — and it *cannot* reach one: the replay
-transport imports `fs`, `path` and `crypto`, nothing else. This is the button that
-says whether the connector honours the contract. The only token involved is the
-package one, already spent at install time.
+### The four steps
 
-**Authorise.** Opens the consent page built by `getAuthUrl` and takes the callback
-on the `auth.redirectPath` declared in the manifest. The code is exchanged with
-`exchangeCode`, and the credentials stay **in memory of the dev server**: never
-written to disk, and lost on restart. The page says whether a refresh token came
-back — without one the connection dies at expiry, silently, which is one of the
-three mistakes the contract exists to prevent.
+**1 · Conformance.** The connector's own suite against its recorded responses.
+No account, no network, and none is reachable: the replay transport imports
+`fs`, `path` and `crypto`, nothing else. It says whether the connector honours
+the contract.
 
-The redirect URI registered in the provider's console must match
-`auth.redirectPath` exactly. Mismatched, the authorisation fails *after* consent,
-which is the worst moment to find out.
+**2 · Authorisation.** Opens the provider's consent page and takes the callback
+on the `auth.redirectPath` declared in the manifest. The page says whether a
+refresh token came back — without one the connection dies at expiry, silently.
 
-**Live connection.** Talks to the provider for real, with the variables from
-`.env` and the credentials from the authorisation. It calls `testConnection` and
-then `listFolders(null)`: two calls and not one, because `testConnection` can pass
-with permissions too narrow to read anything, and an empty listing only shows up
-when you ask for it.
+**3 · Connection.** `testConnection` and then `listFolders(null)`. Two calls and
+not one: the first can pass with permissions too narrow to read anything, and an
+empty listing only shows up when you ask for it.
 
-Conformance says the connector is written correctly. Live says these credentials
-work today. Neither replaces the other.
+**4 · Synchronisation.** Pick a folder and run it. The first pass downloads
+everything into `.sync/<connector>/` and asks for the starting cursor; the ones
+after ask for the delta.
 
-The endpoints live inside the Vite dev server, because a connector is a Node
-module and the browser cannot run it. `npm run build` produces a page with no
-backend behind it: this is a development tool, so use `npm run dev`.
+**If the second pass downloads everything again, the connector is wrong** — and
+that is the one thing fixtures can never tell you. Conformance checks the *shape*
+of `getChanges` against a recording; whether a connector re-reads the whole
+archive every night shows up only against a real account.
 
-## Writing a connector
-
-1. Copy one of the two directories and rename it. **Start from `dropbox/`**: it
-   uses plain HTTP, its identifiers are paths and it has a delta cursor — the
-   shape of most providers. `google-drive/` is the exception (opaque ids, native
-   documents that must be exported).
-2. Rewrite `manifest.js`: key, label, authentication kind, required environment
-   variables, capabilities.
-3. Rewrite `provider.js`. Every call goes through `this.http` — that is what
-   makes it verifiable with no account and no network.
-4. Prepare a test account as `scenario.js` describes and record the responses:
-   `npm run record -- <directory>`.
-5. `npm test`. Until it is green, it is not finished.
-
-## What conformance checks
-
-It is not a formality: these are the ways connectors actually break.
-
-| check | what it prevents |
-|---|---|
-| `listFiles` paginates to the end | the connector that reads the first response only: fine with ten files, loses three thousand |
-| `getChanges(null)` returns only the cursor | the delta that re-reads the whole archive on every run, for ever |
-| the cursor advances | synchronisation seeing the same changes endlessly |
-| `downloadFile` → `{ buffer, mimeType }` | the bare Buffer, which saves a Google Doc with the wrong extension |
-| file and folder shapes | `modified` instead of `modifiedAt`: null dates found weeks later |
-| `takeRefreshedCredentials()` | the token renewed in memory and never stored: the connection dies on restart |
-| `fileBelongsToFolder` on path providers | sub-folders that never synchronise anything |
-| a vanished file surfaces as `fileNotFound` | a renamed file marked permanently broken, or an empty download reaching the index |
-| a 429 does not become an empty list | the host reading "folder emptied" and deleting indexed documents |
-
-## The two examples, and why they differ
-
-**`connectors/dropbox/`** — OAuth2 with refresh, plain HTTP, identifiers that
-are lowercase paths, a delta cursor, `fileBelongsToFolder` overridden for
-recursive matching. It is a faithful port of the connector running in
-production, with its calls moved onto `this.http`.
-
-**`connectors/google-drive/`** — OAuth2 with `access_type=offline` and
-`prompt=consent`, opaque ids, folders that are files with a special mime type,
-native documents that are **exported** rather than downloaded, a wastebasket
-that has to be read as a deletion, and a final cursor (`newStartPageToken`)
-different from the last `nextPageToken`.
-
-This Drive connector **does not use `googleapis`**: the calls it needs are six,
-by hand they fit in two hundred lines, they do not drag a hundred megabytes into
-the image and — the part that matters — they go through `this.http`, so they can
-be verified offline. A connector that talks to an SDK cannot be verified by
-someone who does not hold the account.
-
-> **Before it replaces the version in service:** this Drive connector is
-> verified against fixtures, not against a real Google account. The recorded
-> responses reproduce the shapes of the v3 API as the production version uses
-> them, but the first run on a real account should happen in DEV.
-
-## Fixtures
-
-They are provider responses saved to files. Whoever records them uses real
-credentials; whoever reads the code, reviews it, or runs CI uses only the files.
-
-`createRecordingTransport` replaces the sensitive fields it knows about —
-`authorization`, `access_token`, `refresh_token`, `client_secret`, passwords,
-cookies — including inside URL-encoded bodies. **Read them anyway**: a provider
-can put a token where nobody expects it.
-
-The fixtures in this repository are written by hand against the documented APIs,
-because the accounts they describe are not ours to hand around. That is
-acceptable — faithful is what matters, recorded or not — but a fixture invented
-to make a check pass is not.
+State — credentials, chosen folder, cursor — lives in `.host-state.json`. It
+holds live tokens, so it is git-ignored. That file is where this host and the
+real service differ; everything else is the same shape.
 
 ## Layout
 

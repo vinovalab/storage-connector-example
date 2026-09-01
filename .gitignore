@@ -12,3 +12,5 @@ dist/
 # `.env.*` would swallow `.env.example` and nobody would ever notice.
 !.env.example
 !.npmrc.example
+.host-state.json
+.sync/

@@ -67,9 +67,28 @@ const real = async (config) => axios({ ...config, validateStatus: () => true, ti
 async function main() {
   const env = Object.fromEntries(manifest.config.map((v) => [v.key, process.env[v.key]]));
   const missing = manifest.config.filter((v) => v.required && !env[v.key]).map((v) => v.key);
+
+  // Il token dell'account non sta nel manifest — quello dichiara la
+  // configurazione dell'applicazione, non le credenziali di chi la usa — ma
+  // senza non si registra niente: le chiamate partono e il provider risponde
+  // 401, che sembra un token sbagliato invece di un token assente.
+  if (!process.env.CONNECTOR_ACCESS_TOKEN) missing.push("CONNECTOR_ACCESS_TOKEN");
+
   if (missing.length) {
     console.error(`Missing variables: ${missing.join(", ")}`);
+    console.error("");
+    console.error("They go in the .env in the repository root — copy .env.example. This script");
+    console.error("reads that file on its own, so nothing has to be exported.");
+    console.error("");
+    console.error(`And before recording, ${path.relative(process.cwd(), path.join(base, "scenario.js"))} has to describe`);
+    console.error("YOUR account: folder paths, the files in them, the one to download. Recording");
+    console.error("against an account that does not match it produces fixtures conformance rejects.");
     process.exit(1);
+  }
+
+  if (!process.env.CONNECTOR_REFRESH_TOKEN && manifest.auth?.kind === "oauth2") {
+    console.warn("CONNECTOR_REFRESH_TOKEN is not set: the refresh call will not be recorded, and");
+    console.warn("conformance checks it. Authorise with offline access to obtain one.");
   }
 
   const provider = new Provider({
