@@ -61,6 +61,13 @@ npm install
 not complain — it sends the literal text to the registry, and the 401 reads like
 a bad token rather than a missing variable.
 
+Two failures, two causes, and it is worth telling them apart:
+
+| npm says | what happened |
+|---|---|
+| `404 Not Found — GET https://registry.npmjs.org/@vinovalab%2f…` | **`.npmrc` is missing.** Without it npm does not know the scope lives on GitHub Packages, so it asks the public registry, where the package does not exist. `cp .npmrc.example .npmrc`. |
+| `401 Unauthorized` from `npm.pkg.github.com` | `.npmrc` is there, the token is not: paste it in, or export `NODE_AUTH_TOKEN` first. |
+
 **2. The provider tokens — you need none of them for anything on this page.**
 App keys, client ids and the account's access and refresh tokens are used only by
 `npm run record`, which is how fixtures are produced in the first place.
@@ -94,17 +101,37 @@ connector's `manifest.js` imports the contract package, so without the root
 `node_modules` the page loads but every connector shows an error instead of its
 capabilities.
 
-You get one button per directory under `connectors/` — `dropbox` and
-`google-drive`. Pressing it runs that connector's `conformance.test.js`, the same
-suite `npm test` runs rather than a second implementation of the checks, and
-shows what passed, what failed and the full output.
+Three buttons per directory under `connectors/`, and they answer different
+questions.
 
-**No login, and no provider token.** Every call a connector makes goes through
-`this.http`, and the responses are recorded in its fixtures: the page needs no
-account, no credentials and no network. The only token involved is the package
-one, and it was already spent at install time.
+**Conformance — recorded.** Runs that connector's `conformance.test.js`, the same
+suite `npm test` runs rather than a second implementation of the checks. It needs
+no account, no credentials and no network — and it *cannot* reach one: the replay
+transport imports `fs`, `path` and `crypto`, nothing else. This is the button that
+says whether the connector honours the contract. The only token involved is the
+package one, already spent at install time.
 
-The two endpoints live inside the Vite dev server, because a connector is a Node
+**Authorise.** Opens the consent page built by `getAuthUrl` and takes the callback
+on the `auth.redirectPath` declared in the manifest. The code is exchanged with
+`exchangeCode`, and the credentials stay **in memory of the dev server**: never
+written to disk, and lost on restart. The page says whether a refresh token came
+back — without one the connection dies at expiry, silently, which is one of the
+three mistakes the contract exists to prevent.
+
+The redirect URI registered in the provider's console must match
+`auth.redirectPath` exactly. Mismatched, the authorisation fails *after* consent,
+which is the worst moment to find out.
+
+**Live connection.** Talks to the provider for real, with the variables from
+`.env` and the credentials from the authorisation. It calls `testConnection` and
+then `listFolders(null)`: two calls and not one, because `testConnection` can pass
+with permissions too narrow to read anything, and an empty listing only shows up
+when you ask for it.
+
+Conformance says the connector is written correctly. Live says these credentials
+work today. Neither replaces the other.
+
+The endpoints live inside the Vite dev server, because a connector is a Node
 module and the browser cannot run it. `npm run build` produces a page with no
 backend behind it: this is a development tool, so use `npm run dev`.
 
