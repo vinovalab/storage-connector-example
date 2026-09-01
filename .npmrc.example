@@ -1,17 +1,26 @@
-; Copy this file to `.npmrc` in the repository root and paste in your token:
+; Copy this file to `.npmrc` in the repository root:
 ;
 ;   cp .npmrc.example .npmrc
 ;
 ; `.npmrc` is ignored by git and must never be committed. This file, with the
 ; placeholder, is the one that is committed.
 ;
-; The token is the one issued with your challenge. It needs `read:packages`.
-; Without it `npm install` fails with a 401, because
-; @vinovalab/storage-connector-contract is published to GitHub Packages and not
-; to the public registry.
+; The token is available at https://collaborators.vinovalab.ai, in the details
+; of your challenge. It needs `read:packages`. Without it `npm install` fails
+; with a 401, because @vinovalab/storage-connector-contract is published to
+; GitHub Packages and not to the public registry.
+;
+; Either paste the token in place of the placeholder below, or leave the line as
+; it is and export NODE_AUTH_TOKEN from your `.env`:
+;
+;   set -a; . ./.env; set +a
+;
+; Beware of the middle ground: if you leave `${NODE_AUTH_TOKEN}` and never
+; export it, npm does not complain. It sends the literal text to the registry
+; and the 401 looks like a bad token instead of a missing variable.
 ;
 ; The same two lines work in ~/.npmrc if you would rather keep one copy for
 ; every repository.
 
 @vinovalab:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=PASTE-YOUR-TOKEN-HERE
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}

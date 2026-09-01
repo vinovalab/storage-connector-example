@@ -31,7 +31,7 @@ each one has a template committed beside it. Copy it and fill it in.
 
 ```bash
 cp .npmrc.example .npmrc     # the package token — needed to install anything
-cp .env.example .env         # the provider tokens — only to record fixtures
+cp .env.example .env         # the rest — only to record fixtures
 ```
 
 `.env` and `.npmrc` are ignored by git; `.env.example` and `.npmrc.example` are
@@ -39,22 +39,38 @@ committed. That takes an explicit negation in `.gitignore`, because the `.env.*`
 rule would otherwise swallow `.env.example` and no one would notice until a new
 arrival had nothing to copy.
 
-**1. `.npmrc` — the package token. This is the one you need to run anything.**
+**1. The package token — `NODE_AUTH_TOKEN`. This is the one you need to run
+anything.** It is available at
+[collaborators.vinovalab.ai](https://collaborators.vinovalab.ai), in the details
+of your challenge, and it needs `read:packages`.
 `@vinovalab/storage-connector-contract` is published to GitHub Packages, not to
-the public registry, so `npm install` fails with a `401` without it. The token is
-the one issued with your challenge, and it needs `read:packages`. The same two
-lines work in `~/.npmrc` if you would rather keep one copy for every repository.
+the public registry, so `npm install` fails with a `401` without it.
 
-**2. `.env` — the provider tokens, and you need none of them for anything on
-this page.** App keys, client ids and the account's access and refresh tokens are
-used only by `npm run record`, which is how fixtures are produced in the first
-place. `.env.example` lists every variable the two connectors declare, with the
-console page each value comes from and the two authorisation flags that are
-forgotten most often.
+There are two ways to supply it, and `.npmrc.example` supports both. The short
+one is to paste the token into `.npmrc` and forget about it. The other is to
+keep it in `.env` as `NODE_AUTH_TOKEN` and export it before installing, which is
+what you want when the same value also has to reach a Docker build or a CI job:
 
-`npm run record` reads that file on its own. A variable set in the shell wins
-over the file, so one value can be overridden for a single run without editing
-anything:
+```bash
+set -a; . ./.env; set +a
+npm install
+```
+
+**npm does not read `.env` by itself**, and the failure is unhelpful: with
+`${NODE_AUTH_TOKEN}` left in `.npmrc` and the variable never exported, npm does
+not complain — it sends the literal text to the registry, and the 401 reads like
+a bad token rather than a missing variable.
+
+**2. The provider tokens — you need none of them for anything on this page.**
+App keys, client ids and the account's access and refresh tokens are used only by
+`npm run record`, which is how fixtures are produced in the first place.
+`.env.example` lists every variable the two connectors declare, with the console
+page each value comes from and the two authorisation flags that are forgotten
+most often.
+
+`npm run record` reads that file on its own — no exporting needed, that part is
+only npm's limitation. A variable set in the shell wins over the file, so one
+value can be overridden for a single run without editing anything:
 
 ```bash
 CONNECTOR_ACCESS_TOKEN=another-one npm run record -- dropbox
