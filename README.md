@@ -115,11 +115,19 @@ collaborator who has to stand up Postgres to try their own connector never tries
 it.
 
 ```bash
-npm install          # in the repository root
+cp .npmrc.example .npmrc               # first, or npm asks npmjs and gets a 404
+set -a; . ./.env; set +a               # NODE_AUTH_TOKEN — npm does not read .env
+
+npm install          # in the repository root, not only in web/
 npm start            # the host, on http://localhost:5191
 
 cd web && npm install && npm run dev   # the page, on http://localhost:5190
 ```
+
+The install in the root is the one people skip, and the failure is
+unhelpful — `Cannot find module '@vinovalab/storage-connector-contract'` from a
+file nobody has opened. The host now checks at startup and says what to run
+instead.
 
 The page is only the host's interface: it proxies `/api` and `/oauth` to it. If
 you would rather have one process, `cd web && npm run build` and the host serves

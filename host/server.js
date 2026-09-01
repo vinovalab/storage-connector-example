@@ -29,6 +29,30 @@ if (fs.existsSync(fileEnv) && typeof process.loadEnvFile === "function") {
   try { process.loadEnvFile(fileEnv); } catch { /* gia caricato */ }
 }
 
+// Prima di ogni altra cosa: il contratto c'e?
+//
+// Senza, Node lancia un MODULE_NOT_FOUND con uno stack di sei righe che non
+// dice cosa fare. E la stessa installazione mancante che si e gia presentata
+// come 404 di npm e come "Cannot find module axios": vale la pena spenderci
+// dieci righe una volta sola.
+try {
+  require.resolve("@vinovalab/storage-connector-contract");
+} catch {
+  console.error("");
+  console.error("  @vinovalab/storage-connector-contract non e installato.");
+  console.error("");
+  console.error("  L'installazione va fatta nella RADICE del repository, non solo in web/:");
+  console.error("");
+  console.error("    cp .npmrc.example .npmrc     # senza, npm cerca su npmjs e risponde 404");
+  console.error("    set -a; . ./.env; set +a     # NODE_AUTH_TOKEN, che npm non legge da solo");
+  console.error("    npm install");
+  console.error("");
+  console.error("  Il token sta nei dettagli della challenge su collaborators.vinovalab.ai");
+  console.error("  e gli serve read:packages.");
+  console.error("");
+  process.exit(1);
+}
+
 const { leggiRegistro } = require("./registry");
 const { costruisci, persistiRinnovo } = require("./provider");
 const { sincronizza, DESTINAZIONE } = require("./sync");
